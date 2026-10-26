@@ -1,0 +1,292 @@
+# frozen_string_literal: true
+
+require 'rails_helper'
+
+describe 'Jobs', :js, :without_executor do
+  before do
+    allow(GoodJob).to receive_messages(retry_on_unhandled_error: false, preserve_job_records: true)
+  end
+
+  it 'renders chart js' do
+    visit good_job.jobs_path
+    expect(page).to have_text 'GoodJob 👍'
+  end
+
+  it 'renders each top-level page successfully' do
+    visit good_job.jobs_path
+    expect(page).to have_text 'GoodJob 👍'
+
+    click_link "Jobs"
+    expect(page).to have_text 'GoodJob 👍'
+
+    click_link "Cron"
+    expect(page).to have_text 'GoodJob 👍'
+
+    click_link "Processes"
+    expect(page).to have_text 'GoodJob 👍'
+  end
+
+  describe 'Jobs' do
+    let(:unfinished_job) do
+      ExampleJob.set(wait: 10.minutes, queue: :mice).perform_later
+      GoodJob::Job.order(created_at: :asc).last
+    end
+
+    let(:discarded_job) do
+      Timecop.travel 1.hour.ago
+      ExampleJob.set(queue: :elephants).perform_later(ExampleJob::DEAD_TYPE)
+      5.times do
+        Timecop.travel 5.minutes
+        GoodJob.perform_inline
+      end
+      Timecop.return
+      GoodJob::Job.order(created_at: :asc).last
+    end
+
+    before do
+      ActiveJob::Base.queue_adapter = GoodJob::Adapter.new(execution_mode: :inline)
+      discarded_job
+      ActiveJob::Base.queue_adapter = GoodJob::Adapter.new(execution_mode: :external)
+      unfinished_job
+    end
+
+    describe 'filtering' do
+      let!(:foo_queue_job) { ConfigurableQueueJob.set(wait: 10.minutes).perform_later(queue_as: 'foo') }
+
+      it "can filter by job class" do
+        visit good_job.jobs_path
+        wait_for_turbo_load
+
+        select "ConfigurableQueueJob", from: "job_class_filter"
+        expect(page).to have_current_path(/job_class=ConfigurableQueueJob/)
+
+        table = page.find("[role=table]")
+        expect(table).to have_css("[role=row]", count: 1)
+        expect(table).to have_text(foo_queue_job.job_id)
+      end
+
+      it "can filter by state" do
+        visit good_job.jobs_path
+        wait_for_turbo_load
+
+        within "#filter" do
+          click_link "Scheduled"
+        end
+
+        expect(page).to have_current_path(/state=scheduled/)
+
+        expect(page).to have_css("[role=table] [role=row]", count: 2)
+        within("[role=table]") do
+          expect(page).to have_text(foo_queue_job.job_id)
+        end
+      end
+
+      it "can filter by queue" do
+        visit good_job.jobs_path
+        wait_for_turbo_load
+
+        select "foo", from: "job_queue_filter"
+        expect(page).to have_current_path(/queue_name=foo/)
+
+        expect(page).to have_css("[role=table] [role=row]", count: 1)
+        within("[role=table]") do
+          expect(page).to have_text(foo_queue_job.job_id)
+        end
+      end
+
+      it "can filter by multiple variables" do
+        visit good_job.jobs_path
+        wait_for_turbo_load
+
+        select "ConfigurableQueueJob", from: "job_class_filter"
+        expect(page).to have_current_path(/job_class=ConfigurableQueueJob/)
+
+        select "mice", from: "job_queue_filter"
+        expect(page).to have_current_path(/queue_name=mice&job_class=ConfigurableQueueJob/)
+
+        expect(page).to have_text("No jobs found.")
+
+        select "foo", from: "job_queue_filter"
+        expect(page).to have_text(foo_queue_job.job_id)
+      end
+
+      it 'can search by argument' do
+        visit '/good_job'
+        wait_for_turbo_load
+
+        expect(page).to have_css('[role=row]', count: 3)
+        fill_in 'query', with: ExampleJob::DEAD_TYPE
+        click_button 'Search'
+
+        expect(page).to have_css('[role=row]', count: 1)
+      end
+
+      it "can filter by label" do
+        labeled_job = ExampleJob.set(wait: 10.minutes, good_job_labels: ["urgent"]).perform_later
+        GoodJob::Job.order(created_at: :asc).last
+
+        visit good_job.jobs_path
+        wait_for_turbo_load
+
+        fill_in "label_filter", with: "urgent"
+        click_button "Search"
+
+        expect(page).to have_current_path(/label=urgent/)
+
+        table = page.find("[role=table]")
+        expect(table).to have_css("[role=row]", count: 1)
+        expect(table).to have_text(labeled_job.job_id)
+      end
+
+      it "can filter by label via badge link" do
+        labeled_job = ExampleJob.set(wait: 10.minutes, good_job_labels: ["urgent"]).perform_later
+        GoodJob::Job.order(created_at: :asc).last
+
+        visit good_job.jobs_path
+        wait_for_turbo_load
+
+        within("##{dom_id(GoodJob::Job.find_by(active_job_id: labeled_job.job_id))}") do
+          click_link "urgent"
+        end
+
+        expect(page).to have_current_path(/label=urgent/)
+
+        table = page.find("[role=table]")
+        expect(table).to have_css("[role=row]", count: 1)
+        expect(table).to have_text(labeled_job.job_id)
+      end
+
+      it "renders full labels under the job name with a tooltip showing the full label" do
+        long_label = "a_very_long_label_that_exceeds_the_badge_width"
+        labeled_job = ExampleJob.set(wait: 10.minutes, good_job_labels: [long_label]).perform_later
+
+        visit good_job.jobs_path
+        wait_for_turbo_load
+
+        within("##{dom_id(GoodJob::Job.find_by(active_job_id: labeled_job.job_id))} [role=group]") do
+          expect(page).to have_css("a.badge.text-truncate[data-bs-toggle='tooltip']", exact_text: long_label)
+          expect(page).to have_css("a.badge[data-bs-original-title='#{long_label}']")
+        end
+      end
+    end
+
+    it 'loads execution details on demand' do
+      execution = discarded_job.executions.order(:created_at).last
+      visit good_job.job_path(discarded_job)
+      wait_for_turbo_load
+
+      within "##{dom_id(execution)}" do
+        click_on 'Full Trace'
+        expect(page).to have_css "##{dom_id(execution, :full_pane)}", text: execution.error_backtrace.last
+
+        click_on 'Inspect'
+      end
+      # Lazy frames load once scrolled into view
+      scroll_to find("##{dom_id(execution, :params)}")
+      expect(page).to have_css "##{dom_id(execution, :params)}", text: '"job_class": "ExampleJob"'
+    end
+
+    it 'can retry discarded jobs' do
+      visit '/good_job'
+      wait_for_turbo_load
+
+      expect do
+        within "##{dom_id(discarded_job)}" do
+          click_button 'Actions'
+          accept_confirm { click_on 'Retry job' }
+        end
+        expect(page).to have_text "Job has been retried"
+      end.to change { discarded_job.reload.status }.from(:discarded).to(:queued)
+    end
+
+    it 'can discard jobs' do
+      visit '/good_job'
+      wait_for_turbo_load
+
+      expect do
+        within "##{dom_id(unfinished_job)}" do
+          click_button 'Actions'
+          accept_confirm { click_on 'Discard job' }
+        end
+        expect(page).to have_text :all, "Job has been discarded"
+      end.to change { unfinished_job.reload.finished_at }.from(nil).to within(1.second).of(Time.current)
+    end
+
+    it 'can force discard jobs' do
+      unfinished_job.update performed_at: 1.hour.ago, finished_at: nil
+
+      visit '/good_job'
+      wait_for_turbo_load
+
+      expect do
+        within "##{dom_id(unfinished_job)}" do
+          click_button 'Actions'
+          accept_confirm { click_on 'Force discard' }
+        end
+        expect(page).to have_text :all, "Job has been force discarded"
+      end.to change { unfinished_job.reload.finished_at }.from(nil).to within(1.second).of(Time.current)
+    end
+
+    it 'can destroy jobs' do
+      visit '/good_job'
+      wait_for_turbo_load
+
+      within "##{dom_id(discarded_job)}" do
+        click_button 'Actions'
+        accept_confirm { click_on 'Destroy job' }
+      end
+      expect(page).to have_text "Job has been destroyed"
+      expect { discarded_job.reload }.to raise_error(ActiveRecord::RecordNotFound)
+    end
+
+    it 'performs batch job actions' do
+      visit "/good_job"
+      wait_for_turbo_load
+
+      expect(page).to have_field(checked: true, count: 0)
+
+      check "toggle_job_ids"
+      expect(page).to have_field(checked: true, count: 3)
+
+      uncheck "toggle_job_ids"
+      expect(page).to have_field(checked: true, count: 0)
+
+      expect do
+        check "toggle_job_ids"
+        within("[role=table] header") { accept_confirm { click_button "Reschedule all" } }
+        expect(page).to have_field(checked: true, count: 0)
+      end.to change { unfinished_job.reload.scheduled_at }.to within(1.second).of(Time.current)
+
+      expect do
+        check "toggle_job_ids"
+        within("[role=table] header") { accept_confirm { click_button "Discard all" } }
+        expect(page).to have_field(checked: true, count: 0)
+      end.to change { GoodJob::Job.discarded.count }.from(1).to(2)
+
+      expect do
+        check "toggle_job_ids"
+        within("[role=table] header") { accept_confirm { click_button "Retry all" } }
+        expect(page).to have_field(checked: true, count: 0)
+      end.to change { GoodJob::Job.discarded.count }.from(2).to(0)
+
+      visit good_job.jobs_path(limit: 1)
+      expect do
+        check "toggle_job_ids"
+        check "Apply to all 2 jobs"
+        within("[role=table] header") { accept_confirm { click_button "Discard all" } }
+        expect(page).to have_field(checked: true, count: 0)
+      end.to change { GoodJob::Job.discarded.count }.from(0).to(2)
+
+      click_link "Jobs"
+
+      expect do
+        check "toggle_job_ids"
+        within("[role=table] header") do
+          click_button "Toggle Actions"
+          accept_confirm { click_button "Destroy all" }
+        end
+        expect(page).to have_field(checked: true, count: 0)
+      end.to change(GoodJob::Job, :count).from(2).to(0)
+    end
+  end
+end

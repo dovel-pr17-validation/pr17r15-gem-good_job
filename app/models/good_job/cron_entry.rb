@@ -1,0 +1,268 @@
+# frozen_string_literal: true
+
+require "concurrent/hash"
+require "concurrent/scheduled_task"
+require "fugit"
+
+module GoodJob # :nodoc:
+  #
+  # A CronEntry represents a single scheduled item's properties.
+  #
+  class CronEntry
+    include ActiveModel::Model
+
+    attr_reader :params
+
+    VALUE_TYPES = {
+      args: Array,
+      kwargs: Hash,
+      set: Hash,
+    }.freeze
+
+    validate :validate_cron_key
+    validate :validate_cron_schedule
+    validate :validate_job_class
+    validate :validate_value_types
+
+    def self.all(configuration: nil)
+      configuration ||= GoodJob.configuration
+      configuration.cron_entries
+    end
+
+    def self.last_jobs_by_key(cron_entries)
+      cron_keys = cron_entries.map { |entry| entry.key.to_s }
+      return {} if cron_keys.empty?
+
+      from_clause = GoodJob::Job.sanitize_sql_array(
+        ["unnest(ARRAY[?]::text[]) AS cron_keys(cron_key)", cron_keys]
+      )
+
+      join_clause = <<~SQL.squish
+        CROSS JOIN LATERAL (
+          SELECT * FROM #{GoodJob::Job.quoted_table_name}
+          WHERE #{GoodJob::Job.quoted_table_name}.cron_key = cron_keys.cron_key
+          ORDER BY cron_at DESC NULLS LAST
+          LIMIT 1
+        ) AS lateral_jobs
+      SQL
+
+      GoodJob::Job
+        .select("lateral_jobs.*")
+        .from(from_clause)
+        .joins(join_clause)
+        .index_by(&:cron_key)
+    end
+
+    def self.find(key, configuration: nil)
+      all(configuration: configuration).find { |entry| entry.key == key.to_sym }.tap do |cron_entry|
+        raise ActiveRecord::RecordNotFound unless cron_entry
+      end
+    end
+
+    def initialize(params = {})
+      @params = params
+    end
+
+    def key
+      params[:key]
+    end
+
+    alias id key
+    alias to_param key
+
+    def job_class
+      params[:class]
+    end
+
+    def set
+      params[:set]
+    end
+
+    def args
+      params[:args]
+    end
+
+    def kwargs
+      params[:kwargs]
+    end
+
+    def description
+      params[:description]
+    end
+
+    def next_at(previously_at: nil)
+      if cron_proc?
+        result = Rails.application.executor.wrap { cron.call(previously_at || last_job_at) }
+        if result.is_a?(String)
+          parse_cron_string(result)&.next_time&.to_t
+        else
+          result
+        end
+      else
+        fugit&.next_time&.to_t
+      end
+    end
+
+    def within(period, previously_at: nil)
+      if cron_proc?
+        result = Rails.application.executor.wrap { cron.call(previously_at || last_job_at) }
+        if result.is_a?(String)
+          parse_cron_string(result)&.within(period)&.map(&:to_t) || []
+        else
+          # A proc that returns a Time is called with the previous run's time, so when cron starts,
+          # CronManager#create_task already enqueues every run missed since the last job.
+          []
+        end
+      else
+        fugit&.within(period)&.map(&:to_t) || []
+      end
+    end
+
+    def enabled?
+      GoodJob::Setting.cron_key_enabled?(key, default: enabled_by_default?)
+    end
+
+    def enable
+      GoodJob::Setting.cron_key_enable(key)
+    end
+
+    def disable
+      GoodJob::Setting.cron_key_disable(key)
+    end
+
+    def enqueue(cron_at = nil)
+      GoodJob::CurrentThread.within do |current_thread|
+        current_thread.cron_key = key
+        current_thread.cron_at = cron_at
+
+        I18n.with_locale(I18n.default_locale) do
+          job_klass = resolve_job_class
+          next unless job_klass.is_a?(Class)
+
+          configured_job = job_klass.set(resolve_set)
+          job_args = resolve_args
+          job_kwargs = resolve_kwargs
+          job_kwargs.present? ? configured_job.perform_later(*job_args, **job_kwargs) : configured_job.perform_later(*job_args)
+        end
+      end
+    end
+
+    def display_properties
+      {
+        key: key,
+        class: job_class,
+        cron: display_schedule,
+        set: display_property(set),
+        description: display_property(description),
+      }.tap do |properties|
+        properties[:class] = display_property(job_class) if job_class.present?
+        properties[:args] = display_property(args) if args.present?
+        properties[:kwargs] = display_property(kwargs) if kwargs.present?
+      end
+    end
+
+    def display_schedule
+      fugit ? fugit.original : display_property(cron)
+    end
+
+    def jobs
+      GoodJob::Job.where(cron_key: key)
+    end
+
+    def last_job
+      jobs.order("cron_at DESC NULLS LAST").first
+    end
+
+    def last_job_at
+      return if last_job.blank?
+
+      (last_job.cron_at || last_job.created_at).localtime
+    end
+
+    def enabled_by_default?
+      value = params.fetch(:enabled_by_default, true)
+      value.respond_to?(:call) ? value.call : value
+    end
+
+    private
+
+    def validate_cron_key
+      errors.add(:key, "must be a Symbol") unless key.is_a?(Symbol)
+    end
+
+    def validate_cron_schedule
+      return if cron_proc?
+      return if fugit.instance_of?(Fugit::Cron)
+
+      errors.add(:cron, "'#{cron}' is not a valid schedule")
+    end
+
+    def validate_job_class
+      return if job_class.blank? || job_class.is_a?(Class) || job_class.respond_to?(:call)
+
+      resolve_job_class
+    rescue NameError
+      errors.add(:class, "'#{job_class}' does not exist")
+    end
+
+    def validate_value_types
+      VALUE_TYPES.each do |attribute, type|
+        value = public_send(attribute)
+        next if value.blank? || value.respond_to?(:call) || value.is_a?(type)
+
+        errors.add(attribute, "must be a #{type}")
+      end
+    end
+
+    def resolve_job_class
+      value = job_class
+      value = value.call if value.respond_to?(:call)
+      value.is_a?(String) ? value.constantize : value
+    end
+
+    def cron
+      params[:cron]
+    end
+
+    def cron_proc?
+      cron.respond_to?(:call)
+    end
+
+    def fugit
+      return @_fugit if defined?(@_fugit)
+
+      @_fugit = parse_cron_string(cron)
+    end
+
+    def parse_cron_string(string)
+      schedule = Fugit.parse(string)
+      schedule if schedule.instance_of?(Fugit::Cron)
+    end
+
+    def resolve_set
+      value = set || {}
+      value.respond_to?(:call) ? value.call : value
+    end
+
+    def resolve_args
+      value = args || []
+      value.respond_to?(:call) ? value.call : value
+    end
+
+    def resolve_kwargs
+      value = kwargs || nil
+      value.respond_to?(:call) ? value.call : value
+    end
+
+    def display_property(value)
+      case value
+      when NilClass
+        "None"
+      when Callable
+        "Lambda/Callable"
+      else
+        value
+      end
+    end
+  end
+end

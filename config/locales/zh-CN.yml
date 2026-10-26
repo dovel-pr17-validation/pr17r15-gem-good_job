@@ -1,0 +1,343 @@
+---
+zh-CN:
+  good_job:
+    actions:
+      destroy: 删除
+      discard: 丢弃
+      force_discard: 强制丢弃
+      inspect: 检查
+      reschedule: 重新调度
+      retry: 重试
+    batches:
+      actions:
+        confirm_retry: 您确定要重试此批处理吗？
+        retry: 重试
+      index:
+        older_batches: 更早的批处理
+        title: 批处理
+      jobs:
+        actions:
+          confirm_destroy: 您确定要删除此任务吗？
+          confirm_discard: 您确定要丢弃此任务吗？
+          confirm_reschedule: 您确定要重新调度此任务吗？
+          confirm_retry: 您确定要重试此任务吗？
+          destroy: 删除任务
+          discard: 丢弃任务
+          reschedule: 重新调度任务
+          retry: 重试任务
+          title: 操作
+        no_jobs_found: 未找到任务
+      retry:
+        notice: 批处理已重试
+      show:
+        attributes: 属性
+        batched_jobs: 批量任务
+        callback_jobs: 回调任务
+      table:
+        no_batches_found: 未找到批处理
+    cleaner:
+      index:
+        all: 全部
+        class: Class
+        exception: 异常
+        grouped_by_class: 按 Class 分组的丢弃任务
+        grouped_by_exception: 按异常分组的丢弃任务
+        last_1_hour: 最近 1 小时
+        last_24_hours: 最近 24 小时
+        last_3_days: 最近 3 天
+        last_3_hours: 最近 3 小时
+        last_7_days: 最近 7 天
+        title: 丢弃任务清理器
+        total: 总计
+    concurrency_claims:
+      states:
+        granted: 已授予
+        promoted: 已提升
+        waiting: 等待中
+    cron_entries:
+      actions:
+        confirm_disable: 您确定要禁用此定时任务吗？
+        confirm_enable: 您确定要启用此定时任务吗？
+        confirm_enqueue: 您确定要立即入队此定时任务吗？
+        disable: 禁用定时任务
+        enable: 启用定时任务
+        enqueue: 立即入队定时任务
+      disable:
+        notice: 定时任务已禁用
+      enable:
+        notice: 定时任务已启用
+      enqueue:
+        notice: 定时任务已入队
+      index:
+        no_cron_schedules_found: 未找到定时任务
+        title: 定时任务
+      show:
+        cron_entry_key: 定时任务 Key
+    datetime:
+      distance_in_words:
+        about_x_hours:
+          one: 大约 1 小时
+          other: 大约 %{count} 小时
+        about_x_months:
+          one: 大约 1 个月
+          other: 大约 %{count} 个月
+        about_x_years:
+          one: 大约 1 年
+          other: 大约 %{count} 年
+        almost_x_years:
+          one: 接近 1 年
+          other: 接近 %{count} 年
+        half_a_minute: 半分钟
+        less_than_x_minutes:
+          one: 少于 1 分钟
+          other: 少于 %{count} 分钟
+        less_than_x_seconds:
+          one: 少于 1 秒
+          other: 少于 %{count} 秒
+        over_x_years:
+          one: 超过 1 年
+          other: 超过 %{count} 年
+        x_days:
+          one: 1 天
+          other: "%{count} 天"
+        x_minutes:
+          one: 1 分钟
+          other: "%{count} 分钟"
+        x_months:
+          one: 1 个月
+          other: "%{count} 个月"
+        x_seconds:
+          one: 1 秒
+          other: "%{count} 秒"
+        x_years:
+          one: 1 年
+          other: "%{count} 年"
+    duration:
+      hours: "%{hour} 小时 %{min} 分"
+      less_than_10_seconds: "%{sec} 秒"
+      milliseconds: "%{ms} 毫秒"
+      minutes: "%{min} 分 %{sec} 秒"
+      seconds: "%{sec} 秒"
+    error_event:
+      discarded: 已丢弃
+      handled: 已处理
+      interrupted: 已中断
+      retried: 已重试
+      retry_stopped: 停止重试
+      unhandled: 未处理
+    helpers:
+      relative_time:
+        future: "%{time} 后"
+        past: "%{time} 前"
+    jobs:
+      actions:
+        confirm_destroy: 您确定要删除此任务吗？
+        confirm_discard: 您确定要丢弃此任务吗？
+        confirm_force_discard: 您确定要强制丢弃此任务吗？任务将被标记为丢弃，但正在运行的任务不会被停止 - 不过，失败时不会重试。
+        confirm_reschedule: 您确定要重新调度此任务吗？
+        confirm_retry: 您确定要重试此任务吗？
+        destroy: 删除任务
+        discard: 丢弃任务
+        force_discard: 强制丢弃任务
+        reschedule: 重新调度任务
+        retry: 重试任务
+      destroy:
+        notice: 任务已删除
+      discard:
+        notice: 任务已丢弃
+      executions:
+        application_trace: 应用跟踪
+        full_trace: 完整跟踪
+        in_queue: 队列中
+        recovery: 恢复
+        runtime: 运行时间
+        title: 执行情况
+      force_discard:
+        notice: 任务已强制丢弃。它将继续运行但失败时不会重试
+      index:
+        job_pagination: 任务分页
+        older_jobs: 更早的任务
+      reschedule:
+        notice: 任务已重新调度
+      retry:
+        notice: 任务已重试
+      show:
+        jobs: 任务
+      table:
+        actions:
+          apply_to_all:
+            one: 应用于所有 1 个任务。
+            other: 应用于所有 %{count} 个任务。
+          confirm_destroy_all: 您确定要删除所选任务吗？
+          confirm_discard_all: 您确定要丢弃所选任务吗？
+          confirm_reschedule_all: 您确定要重新调度所选任务吗？
+          confirm_retry_all: 您确定要重试所选任务吗？
+          destroy_all: 全部删除
+          discard_all: 全部丢弃
+          reschedule_all: 全部重新调度
+          retry_all: 全部重试
+          title: 操作
+        no_jobs_found: 未找到任务
+        toggle_actions: 切换操作
+        toggle_all_jobs: 切换所有任务
+    models:
+      batch:
+        created: 已创建
+        created_at: 创建时间
+        discarded: 已丢弃
+        discarded_at: 丢弃时间
+        enqueued: 已入队
+        enqueued_at: 入队时间
+        finished: 已完成
+        finished_at: 完成时间
+        jobs: 任务
+        name: 名称
+      cron:
+        class: Class
+        last_run: 上次运行
+        next_scheduled: 下次计划
+        schedule: 计划
+        states:
+          active: 活跃
+          paused: 暂停
+        status: 状态
+      job:
+        arguments: 参数
+        attempts: 尝试次数
+        concurrency_claims: 并发声明
+        labels: 标签
+        priority: 优先级
+        queue: 队列
+    number:
+      format:
+        delimiter: ","
+        separator: "."
+      human:
+        decimal_units:
+          delimiter: ","
+          format: "%n%u"
+          precision: 3
+          separator: "."
+          units:
+            billion: 十亿
+            million: 百万
+            quadrillion: 千万亿
+            thousand: 千
+            trillion: 万亿
+            unit: ''
+    pauses:
+      index:
+        confirm_pause: 您确定要暂停%{value}吗？
+        confirm_unpause: 您确定要恢复%{value}吗？
+        disabled: 因会降低性能的可能性 GoodJob 实验性的暂停功能默认禁用，启用需要配置
+        job_class: 任务 Class
+        label: 标签
+        pause: 暂停
+        queue: 队列
+        title: 暂停
+        type: 暂停类型
+        unpause: 恢复
+        value: 值
+    performance:
+      index:
+        chart_title: 任务执行延迟总和（秒）
+        chart_title_queue: 任务平均排队延迟（秒）
+        chart_title_total: 任务平均总延迟（秒）
+        execution_latency: 执行延迟
+        executions: 执行次数
+        job_class: 任务 Class
+        jobs: 任务数
+        no_executions: 此时间范围内没有执行记录。
+        queue_latency: 排队延迟
+        queue_name: 队列名称
+        title: 性能
+        total_latency: 总延迟
+      latency:
+        average: 平均
+        maximum: 最大
+        minimum: 最小
+      metric:
+        chart_metric: 图表指标
+        metric_options:
+          execution: 执行延迟
+          queue: 排队延迟
+          total: 总延迟
+      range:
+        bucket_size:
+          days: "%{count}天"
+          hours: "%{count}小时"
+          minutes: "%{count}分"
+          months: 约%{count}月
+          seconds: "%{count}秒"
+          years: 约%{count}年
+        chart_bucket_size: 图表聚合间隔：%{size}
+        custom_range: 自定义
+        custom_range_hint: 在图表上拖动
+        end_time: 结束时间
+        open_time_ranges: 打开性能时间范围
+        quick_ranges: 快速范围
+        range_options:
+          1h: 过去 1 小时
+          24h: 过去 24 小时
+          6h: 过去 6 小时
+          7d: 过去 7 天
+        reload_range: 重新加载性能数据
+        start_time: 开始时间
+        time_range: 性能时间范围
+        time_zone: 时区：
+      show:
+        execution_chart_title: 执行延迟
+        queue_chart_title: 排队延迟
+        slow: 慢
+        title: 性能
+        total_chart_title: 总延迟
+    processes:
+      index:
+        cron_enabled: 定时任务已启用
+        no_good_job_processes_found: 未找到 GoodJob 进程
+        process: 进程
+        schedulers: 调度器
+        started: 已启动
+        title: 进程
+        updated: 已更新
+    shared:
+      boolean:
+        'false': 否
+        'true': 是
+      error: 错误
+      filter:
+        all: 全部
+        all_jobs: 所有任务
+        all_queues: 所有队列
+        clear: 清除
+        job_name: 任务名称
+        label: 标签
+        placeholder: 按类、任务 ID、任务参数和错误文本搜索。
+        queue_name: 队列名称
+        search: 搜索
+      navbar:
+        batches: 批处理
+        cleaner: 丢弃清理器
+        cron_schedules: 定时任务
+        jobs: 任务
+        live_poll: 实时轮询
+        name: "GoodJob 👍"
+        pauses: 暂停
+        performance: 性能
+        processes: 进程
+        theme:
+          auto: 自动
+          dark: 深色
+          light: 浅色
+          theme: 主题
+      pending_migrations: GoodJob 有待处理的数据库迁移
+      secondary_navbar:
+        inspiration: 记住，你也在做一份 Good Job！
+        last_updated: 最后更新
+    status:
+      discarded: 已丢弃
+      queued: 已入队
+      retried: 已重试
+      running: 运行中
+      scheduled: 已计划
+      succeeded: 已成功

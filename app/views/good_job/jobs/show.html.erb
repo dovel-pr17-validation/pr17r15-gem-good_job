@@ -1,0 +1,111 @@
+<div class="border-bottom py-2 mb-3">
+  <div class="pt-2">
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb small mb-0">
+        <li class="breadcrumb-item"><%= link_to t(".jobs"), jobs_path %></li>
+        <li class="breadcrumb-item active" aria-current="page">
+          <%= tag.code @job.id, class: "text-muted" %>
+        </li>
+      </ol>
+    </nav>
+    <div class="row align-items-center">
+      <div class="col-md-5">
+        <h2 class="mb-2 mb-md-0"><%= tag.code @job.display_name %></h2>
+        <% if @job.labels.present? %>
+          <div class="d-flex flex-wrap gap-1 mb-2 mb-md-0" aria-label="<%= t "good_job.models.job.labels" %>" role="group">
+            <% @job.labels.each do |label| %>
+              <%= job_label_badge(@job, label, url: jobs_path(label: label)) %>
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+      <div class="col-6 col-md-2">
+        <div class="small text-muted text-uppercase"><%= t "good_job.models.job.queue" %></div>
+        <div class="badge text-bg-primary font-monospace my-2">
+          <%= tag.strong @job.queue_name %>
+        </div>
+      </div>
+      <div class="col-6 col-md-2">
+        <div class="small text-muted text-uppercase"><%= t "good_job.models.job.priority" %></div>
+        <div class="font-monospace fw-bold small my-2"><%= tag.strong @job.priority %></div>
+      </div>
+      <div class="col text-end">
+        <div class="mb-2">
+          <%= tag.span relative_time(@job.last_status_at), class: "small" %>
+          <%= status_badge @job.status %>
+        </div>
+        <% if @job.status.in? [:scheduled, :retried, :queued] %>
+          <%= button_to reschedule_job_path(@job.id), method: :put,
+              class: "btn btn-sm btn-outline-primary",
+              form_class: "d-inline-block",
+              aria: { label: t("good_job.jobs.actions.reschedule") },
+              title: t("good_job.jobs.actions.reschedule"),
+              data: { turbo_confirm: t("good_job.jobs.actions.confirm_reschedule") } do %>
+            <%= render_icon "skip_forward" %>
+            <%= t "good_job.actions.reschedule" %>
+          <% end %>
+        <% end %>
+
+        <% if @job.status.in? [:scheduled, :retried, :queued] %>
+          <%= button_to discard_job_path(@job.id), method: :put, class: "btn btn-sm btn-outline-primary", form_class: "d-inline-block", aria: { label: t("good_job.jobs.actions.discard") }, title: t("good_job.jobs.actions.discard"), data: { turbo_confirm: t("good_job.jobs.actions.confirm_discard") } do %>
+            <%= render_icon "stop" %>
+            <%= t "good_job.actions.discard" %>
+          <% end %>
+        <% end %>
+
+        <% if @job.status == :discarded %>
+          <%= button_to retry_job_path(@job.id), method: :put, class: "btn btn-sm btn-outline-primary", form_class: "d-inline-block", aria: { label: t("good_job.jobs.actions.retry") }, title: t("good_job.jobs.actions.retry"), data: { turbo_confirm: t("good_job.jobs.actions.confirm_retry") } do %>
+            <%= render_icon "arrow_clockwise" %>
+            <%= t "good_job.actions.retry" %>
+          <% end %>
+        <% end %>
+
+        <% if @job.status.in? [:discarded, :succeeded] %>
+          <%= button_to job_path(@job.id), method: :delete, class: "btn btn-sm btn-outline-primary", form_class: "d-inline-block", aria: { label: t("good_job.jobs.actions.destroy") }, title: t("good_job.jobs.actions.destroy"), data: { turbo_confirm: t("good_job.jobs.actions.confirm_destroy") } do %>
+            <%= render_icon "trash" %>
+            <%= t "good_job.actions.destroy" %>
+          <% end %>
+        <% end %>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%= render 'good_job/custom_job_details', job: @job %>
+
+<div class="my-4">
+  <h5>
+    <%= t "good_job.models.job.arguments" %>
+    <%= tag.button type: "button", class: "btn btn-sm text-muted", role: "button",
+                   title: t("good_job.actions.inspect"),
+                   data: { bs_toggle: "collapse", bs_target: "##{dom_id(@job, 'params')}" },
+                   aria: { expanded: false, controls: dom_id(@job, "params") } do %>
+      <%= render_icon "info" %>
+      <span class="visually-hidden"><%= t "good_job.actions.inspect" %></span>
+    <% end %>
+  </h5>
+</div>
+<%= tag.pre @job.display_arguments.map { |argument| truncate_display_value(argument).inspect }.join(', '), class: 'text-wrap text-break' %>
+
+<%= tag.div id: dom_id(@job, "params"), class: "list-group-item collapse small bg-dark text-light" do %>
+  <%= tag.pre JSON.pretty_generate(truncate_display_value(@job.display_serialized_params)) %>
+<% end %>
+
+<% if @concurrency_claims.any? %>
+  <div class="my-4">
+    <h5><%= t "good_job.models.job.concurrency_claims" %></h5>
+    <div class="list-group">
+      <% @concurrency_claims.each do |claim| %>
+        <div class="list-group-item d-flex gap-3 align-items-center justify-content-between">
+          <code class="text-break"><%= claim.key %></code>
+          <div class="d-flex gap-3 align-items-center">
+            <%= tag.span relative_time(claim.updated_at), class: "small text-muted" %>
+            <%= tag.span concurrency_claim_icon(claim.state_name) + t(claim.state_name, scope: "good_job.concurrency_claims.states"), class: "badge #{GoodJob::ApplicationHelper::CONCURRENCY_CLAIM_BADGE_CLASSES.fetch(claim.state_name)}" %>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  </div>
+<% end %>
+
+<%= render 'executions', executions: @job.executions.sort_by(&:number).reverse %>

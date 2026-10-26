@@ -1,0 +1,263 @@
+# frozen_string_literal: true
+
+require 'rails_helper'
+
+describe GoodJob::JobsController do
+  around do |example|
+    orig_value = ActionController::Base.allow_forgery_protection
+    ActionController::Base.allow_forgery_protection = false
+    example.run
+    ActionController::Base.allow_forgery_protection = orig_value
+  end
+
+  before do
+    allow(GoodJob).to receive(:preserve_job_records).and_return(true)
+    ActiveJob::Base.queue_adapter = GoodJob::Adapter.new(execution_mode: :inline)
+  end
+
+  describe 'GET #index' do
+    before do
+      ExampleJob.perform_later
+    end
+
+    it 'returns http success' do
+      get good_job.jobs_path
+      expect(response).to have_http_status(:success)
+    end
+  end
+
+  describe 'concurrency claims' do
+    let(:job_id) { SecureRandom.uuid }
+
+    before do
+      GoodJob::Job.create!(id: job_id, active_job_id: job_id, job_class: "ExampleJob", queue_name: "default", labels: %w[slow other], serialized_params: { "job_class" => "ExampleJob", "arguments" => [] })
+      GoodJob::ConcurrencyClaim.create!(job_id: job_id, key: "label:slow", state: GoodJob::ConcurrencyClaim::WAITING)
+      GoodJob::ConcurrencyClaim.create!(job_id: job_id, key: "key:other", state: GoodJob::ConcurrencyClaim::GRANTED)
+    end
+
+    it 'styles labels by their claim on the index' do
+      get good_job.jobs_path
+
+      html = Nokogiri::HTML(response.body)
+      expect(html.at_css("a.badge.border-warning[title='slow · Waiting']").text).to eq "slow (Waiting)"
+      expect(html.at_css("a.badge.text-bg-secondary").text).to eq "other"
+    end
+
+    it 'lists the claims on the job page' do
+      get good_job.job_path(job_id)
+
+      html = Nokogiri::HTML(response.body)
+      expect(html.at_css("a.badge.border-warning[title='Waiting']").text).to eq "slow (Waiting)"
+      expect(response.body).to include("label:slow", "key:other", "Granted")
+    end
+  end
+
+  describe 'filtered arguments' do
+    let(:job_id) { SecureRandom.uuid }
+    let(:job_class) { "ExampleJob" }
+
+    before do
+      allow(Rails.application.config).to receive(:filter_parameters).and_return([:filtered_arg])
+      GoodJob::Job.create!(id: job_id, active_job_id: job_id, job_class: job_class, queue_name: "default", serialized_params: { "job_class" => job_class, "arguments" => ["visible-value", { "filtered_arg" => "hidden-value" }] })
+    end
+
+    it 'hides values whose keys match filter_parameters' do
+      get good_job.job_path(job_id)
+
+      expect(response.body).to include("visible-value", "[FILTERED]")
+      expect(response.body).not_to include("hidden-value")
+    end
+
+    context 'when the job class disables log_arguments' do
+      let(:job_class) { "NoLogArgumentsJob" }
+
+      before { stub_const job_class, Class.new(ActiveJob::Base) { self.log_arguments = false } }
+
+      it 'hides every argument' do
+        get good_job.job_path(job_id)
+
+        expect(response.body).to include("[FILTERED]")
+        expect(response.body).not_to include("visible-value", "hidden-value")
+      end
+    end
+  end
+
+  describe 'GET /jobs/mass_update' do
+    it 'is not found' do
+      get '/good_job/jobs/mass_update'
+      expect(response).to have_http_status(:not_found)
+    end
+  end
+
+  describe 'PUT #mass_update' do
+    let!(:job) do
+      ExampleJob.perform_later
+      GoodJob::Job.first
+    end
+
+    describe 'invalid input' do
+      it 'invalid job id returns success' do
+        put good_job.mass_update_jobs_path, params: {
+          job_ids: ["garbage"],
+          mass_action: 'retry',
+        }
+        expect(response).to have_http_status(:see_other)
+        expect(flash[:notice]).to eq('No jobs were retried')
+      end
+
+      it 'invalid mass_action returns 400' do
+        put good_job.mass_update_jobs_path, params: {
+          job_ids: [job.id],
+          mass_action: 'garbage',
+        }
+        expect(response).to have_http_status(:bad_request)
+      end
+    end
+
+    describe 'mass_action=discard' do
+      before do
+        job.update(finished_at: nil)
+      end
+
+      it 'discards jobs' do
+        put good_job.mass_update_jobs_path, params: {
+          mass_action: 'discard',
+          job_ids: [job.id],
+        }
+
+        expect(response).to have_http_status(:see_other)
+        expect(flash[:notice]).to eq('Successfully discarded 1 job')
+
+        job.reload
+        expect(job.finished_at).to be_present
+        expect(job.error).to include "Discarded through dashboard"
+      end
+    end
+
+    describe 'mass_action=reschedule' do
+      before do
+        job.update(finished_at: nil, scheduled_at: 1.day.from_now)
+      end
+
+      it 'reschedules jobs' do
+        put good_job.mass_update_jobs_path, params: {
+          mass_action: 'reschedule',
+          job_ids: [job.id],
+        }
+
+        expect(response).to have_http_status(:see_other)
+        expect(flash[:notice]).to eq('Successfully rescheduled 1 job')
+
+        job.reload
+        expect(job.scheduled_at).to be_within(1.second).of(Time.current)
+      end
+    end
+
+    describe 'mass_action=retry' do
+      before do
+        job.update(error: "Error message")
+        job.executions.first.update(error: "Error message")
+      end
+
+      it 'retries the job' do
+        expect do
+          put good_job.mass_update_jobs_path, params: {
+            mass_action: 'retry',
+            job_ids: [job.id],
+          }
+        end.to change { job.reload.status }.from(:discarded).to(:succeeded)
+
+        expect(response).to have_http_status(:see_other)
+        expect(flash[:notice]).to eq('Successfully retried 1 job')
+
+        job.reload
+        expect(job.executions.count).to eq 2
+      end
+
+      context 'when Job is not deserializable' do
+        before do
+          job.update(serialized_params: { "job_class" => "NonExistentJob" })
+        end
+
+        it 'ignores the job' do
+          put good_job.mass_update_jobs_path, params: {
+            mass_action: 'retry',
+            job_ids: [job.id],
+          }
+          expect(response).to have_http_status(:see_other)
+          expect(flash[:notice]).to eq("No jobs were retried")
+        end
+      end
+    end
+
+    describe 'mass_action=destroy' do
+      it 'destroys jobs' do
+        put good_job.mass_update_jobs_path, params: {
+          mass_action: 'destroy',
+          job_ids: [job.id],
+        }
+
+        expect(response).to have_http_status(:see_other)
+        expect(flash[:notice]).to eq('Successfully destroyed 1 job')
+
+        expect { job.reload }.to raise_error(ActiveRecord::RecordNotFound)
+      end
+    end
+
+    describe 'all_job_ids option' do
+      before do
+        job.update(finished_at: nil)
+      end
+
+      it 'performs the action on all the jobs' do
+        put good_job.mass_update_jobs_path, params: {
+          mass_action: 'discard',
+          all_job_ids: 1,
+        }
+
+        expect(response).to have_http_status(:see_other)
+        expect(flash[:notice]).to eq('Successfully discarded 1 job')
+
+        job.reload
+        expect(job.finished_at).to be_present
+        expect(job.error).to include "Discarded through dashboard"
+      end
+
+      it 'scopes changes to the current filter' do
+        put good_job.mass_update_jobs_path, params: {
+          mass_action: 'discard',
+          all_job_ids: 1,
+          state: 'succeeded',
+        }
+
+        expect(response).to have_http_status(:see_other)
+        expect(flash[:notice]).to eq('No jobs were discarded')
+
+        job.reload
+        expect(job.finished_at).to be_blank
+      end
+    end
+  end
+
+  describe 'PUT #retry_job' do
+    let!(:job) do
+      I18n.with_locale("es") do
+        ExampleJob.perform_later(ExampleJob::ERROR_ONCE_TYPE)
+      end
+      job = GoodJob::Job.first
+      job.discard_job("discard!")
+      job
+    end
+
+    it 'preserves the locale' do
+      I18n.with_locale("en") do
+        put good_job.retry_job_path(job.id)
+      end
+
+      executions = job.reload.executions
+      expect(executions.size).to eq(2)
+      expect(executions[0].serialized_params["locale"]).to eq("es")
+      expect(executions[1].serialized_params["locale"]).to eq("es")
+    end
+  end
+end

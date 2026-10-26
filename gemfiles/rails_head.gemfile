@@ -1,0 +1,5 @@
+source "https://rubygems.org"
+
+ENV["RAILS_VERSION"] = "head"
+
+eval_gemfile "../Gemfile"

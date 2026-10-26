@@ -1,0 +1,233 @@
+# frozen_string_literal: true
+
+require 'rails_helper'
+require 'net/http'
+
+RSpec.describe GoodJob::ProbeServer do
+  let(:port) { 3434 }
+
+  describe 'default rack app' do
+    include Rack::Test::Methods
+
+    let(:app) { described_class.default_app }
+
+    it "responds to the expected routes" do
+      get "/"
+      # See https://github.com/rspec/rspec-rails/pull/2771 for why can't use have_http_status
+      expect(last_response.status).to eq 200 # rubocop:disable RSpecRails/HaveHttpStatus
+      expect(last_response.body).to eq("OK")
+
+      get "/status"
+      expect(last_response.body).to eq("OK")
+
+      get "/status/started"
+      expect(last_response.body).to eq("Not started")
+
+      get "/status/connected"
+      expect(last_response.body).to eq("Not connected")
+
+      get "/unimplemented_url"
+      expect(last_response.status).to eq 404 # rubocop:disable RSpecRails/HaveHttpStatus
+    end
+  end
+
+  describe '#start' do
+    context "with default http server" do
+      context 'with the default healthcheck app' do
+        it 'starts a http server that binds to all interfaces and returns healthcheck responses' do
+          probe_server = described_class.new(port: port, app: nil)
+          probe_server.start
+          wait_until(max: 1) { expect(probe_server.running?).to be true }
+
+          ip_addresses = Socket.ip_address_list.select(&:ipv4?).map(&:ip_address)
+          expect(ip_addresses.size).to be >= 2
+          expect(ip_addresses).to include("127.0.0.1")
+
+          aggregate_failures do
+            ip_addresses.each do |ip_address|
+              response = Net::HTTP.get(ip_address, "/", port)
+              expect(response).to eq("OK")
+
+              response = Net::HTTP.get(ip_address, "/status", port)
+              expect(response).to eq("OK")
+
+              response = Net::HTTP.get(ip_address, "/status/started", port)
+              expect(response).to eq("Not started")
+
+              response = Net::HTTP.get(ip_address, "/status/connected", port)
+              expect(response).to eq("Not connected")
+
+              response = Net::HTTP.get(ip_address, "/unimplemented_url", port)
+              expect(response).to eq("Not found")
+            end
+          end
+
+          probe_server.stop
+        end
+      end
+
+      context 'with a provided app' do
+        it 'starts a http server that binds to all interfaces and uses the supplied app' do
+          app = proc { [200, { "Content-Type" => "text/plain" }, ["Hello World"]] }
+          probe_server = described_class.new(app: app, port: port)
+          probe_server.start
+          wait_until(max: 1) { expect(probe_server.running?).to be true }
+
+          ip_addresses = Socket.ip_address_list.select(&:ipv4?).map(&:ip_address)
+          expect(ip_addresses.size).to be >= 2
+          expect(ip_addresses).to include("127.0.0.1")
+
+          aggregate_failures do
+            ip_addresses.each do |ip_address|
+              response = Net::HTTP.get(ip_address, "/", port)
+              expect(response).to eq("Hello World")
+            end
+          end
+
+          probe_server.stop
+        end
+      end
+    end
+
+    context "with WEBrick" do
+      context 'with the default healthcheck app' do
+        it 'starts a WEBrick http server' do
+          probe_server = described_class.new(port: port, handler: :webrick)
+          probe_server.start
+          wait_until(max: 1) { expect(probe_server.running?).to be true }
+
+          ip_address = Socket.ip_address_list.select(&:ipv4?).map(&:ip_address).first
+          response = Net::HTTP.get_response(ip_address, "/", port)
+
+          expect(response["server"]).to include('WEBrick')
+
+          probe_server.stop
+        end
+
+        it 'server binds to all interfaces and returns healthcheck responses' do
+          probe_server = described_class.new(port: port, handler: :webrick)
+          probe_server.start
+          wait_until(max: 1) { expect(probe_server.running?).to be true }
+
+          ip_addresses = Socket.ip_address_list.select(&:ipv4?).map(&:ip_address)
+          expect(ip_addresses.size).to be >= 2
+          expect(ip_addresses).to include("127.0.0.1")
+
+          aggregate_failures do
+            ip_addresses.each do |ip_address|
+              response = Net::HTTP.get(ip_address, "/", port)
+              expect(response).to eq("OK")
+
+              response = Net::HTTP.get(ip_address, "/status", port)
+              expect(response).to eq("OK")
+
+              response = Net::HTTP.get(ip_address, "/status/started", port)
+              expect(response).to eq("Not started")
+
+              response = Net::HTTP.get(ip_address, "/status/connected", port)
+              expect(response).to eq("Not connected")
+
+              response = Net::HTTP.get(ip_address, "/unimplemented_url", port)
+              expect(response).to eq("Not found")
+            end
+          end
+
+          probe_server.stop
+        end
+
+        context "when WEBrick isn't in the load path" do
+          it 'sends out a warning and falls back to the built in server' do
+            allow_any_instance_of(described_class).to receive(:require).with("webrick").and_raise(LoadError)
+            allow(GoodJob.deprecator).to receive(:warn)
+
+            probe_server = described_class.new(port: port, handler: :webrick)
+            probe_server.start
+            wait_until(max: 1) { expect(probe_server.running?).to be true }
+
+            ip_address = Socket.ip_address_list.select(&:ipv4?).map(&:ip_address).first
+            response = Net::HTTP.get(ip_address, "/", port)
+
+            expect(GoodJob.deprecator).to have_received(:warn)
+            expect(response).to eq("OK")
+
+            probe_server.stop
+          end
+        end
+      end
+
+      context 'with a provided app' do
+        it 'starts a http server that binds to all interfaces and uses the supplied app' do
+          app = proc { [200, { "Content-Type" => "text/plain" }, ["Hello World"]] }
+          probe_server = described_class.new(app: app, port: port)
+          probe_server.start
+          wait_until(max: 1) { expect(probe_server.running?).to be true }
+
+          ip_addresses = Socket.ip_address_list.select(&:ipv4?).map(&:ip_address)
+          expect(ip_addresses.size).to be >= 2
+          expect(ip_addresses).to include("127.0.0.1")
+
+          aggregate_failures do
+            ip_addresses.each do |ip_address|
+              response = Net::HTTP.get(ip_address, "/", port)
+              expect(response).to eq("Hello World")
+            end
+          end
+
+          probe_server.stop
+        end
+      end
+    end
+
+    context "with an unsupported handler" do
+      it 'sends out a warning and falls back to the built in server' do
+        allow(GoodJob.deprecator).to receive(:warn)
+
+        probe_server = described_class.new(port: port, handler: :puma)
+        probe_server.start
+        wait_until(max: 1) { expect(probe_server.running?).to be true }
+
+        ip_address = Socket.ip_address_list.select(&:ipv4?).map(&:ip_address).first
+        response = Net::HTTP.get(ip_address, "/", port)
+
+        expect(GoodJob.deprecator).to have_received(:warn)
+        expect(response).to eq("OK")
+
+        probe_server.stop
+      end
+    end
+  end
+
+  describe '#close_socket' do
+    it 'is a no-op when the server was never started' do
+      expect { described_class.new(port: port).close_socket }.not_to raise_error
+    end
+  end
+
+  describe GoodJob::ProbeServer::SimpleHandler do
+    let(:handler) { described_class.new(GoodJob::ProbeServer.default_app, port: port, logger: GoodJob.logger) }
+
+    describe '#listen' do
+      it 'binds the port without starting the thread that serves it' do
+        handler.listen
+
+        expect { TCPServer.new('0.0.0.0', port).close }.to raise_error(Errno::EADDRINUSE)
+        handler.stop
+      end
+    end
+
+    describe '#close_socket' do
+      it 'releases the port' do
+        handler.listen
+
+        handler.close_socket
+
+        expect { TCPServer.new('0.0.0.0', port).close }.not_to raise_error
+        handler.stop
+      end
+
+      it 'is a no-op when the port was never bound' do
+        expect { handler.close_socket }.not_to raise_error
+      end
+    end
+  end
+end

@@ -1,0 +1,519 @@
+# frozen_string_literal: true
+
+require 'rails_helper'
+
+RSpec.describe 'Batches' do
+  let(:adapter) { GoodJob::Adapter.new(execution_mode: :external) }
+
+  before do
+    ActiveJob::Base.queue_adapter = adapter
+    GoodJob.preserve_job_records = true
+
+    stub_const 'ExpectedError', Class.new(StandardError)
+    stub_const 'TestJob', (Class.new(ActiveJob::Base) do
+      retry_on(ExpectedError, wait: 0, attempts: 2) { nil }
+
+      def perform(error: false)
+        raise ExpectedError if error
+      end
+    end)
+
+    stub_const 'BatchCallbackJob', (Class.new(ActiveJob::Base) do
+      def perform(batch, options)
+        # nil
+      end
+    end)
+  end
+
+  describe 'simple batching' do
+    it 'assigns a batch_id to all jobs in the batch' do
+      active_job = nil
+      batch = GoodJob::Batch.enqueue do
+        active_job = TestJob.perform_later
+      end
+
+      good_job = GoodJob::Job.find_by(active_job_id: active_job.job_id)
+      expect(good_job.batch_id).to eq batch.id
+    end
+
+    it 'supports perform_all_later', skip: !ActiveJob.respond_to?(:perform_all_later) do
+      batch = GoodJob::Batch.enqueue do
+        ActiveJob.perform_all_later([TestJob.new, TestJob.new])
+      end
+
+      expect(batch.active_jobs.count).to eq 2
+    end
+
+    context 'when all jobs complete successfully' do
+      it 'has success status' do
+        batch = GoodJob::Batch.enqueue do
+          TestJob.perform_later
+        end
+
+        expect(batch.finished_at).to be_nil
+        expect(batch).to be_enqueued
+
+        GoodJob.perform_inline
+
+        batch.reload
+        expect(batch).to be_finished
+        expect(batch).to be_succeeded
+
+        expect(batch.finished_at).to be_within(1.second).of(Time.current)
+        expect(batch.discarded_at).to be_nil
+      end
+    end
+
+    context 'when a job is discarded' do
+      it "has a failure status" do
+        batch = GoodJob::Batch.enqueue do
+          TestJob.perform_later(error: true)
+        end
+
+        GoodJob.perform_inline
+
+        batch.reload
+        expect(batch).to be_finished
+        expect(batch).to be_discarded
+
+        expect(batch.finished_at).to be_within(1.second).of(Time.current)
+        expect(batch.discarded_at).to be_within(1.second).of(Time.current)
+      end
+    end
+
+    context 'when there is a callback' do
+      it 'calls the callback with a batch' do
+        batch = GoodJob::Batch.enqueue(description: "foobar", on_finish: "BatchCallbackJob", foo: "bar") do
+          TestJob.perform_later
+        end
+
+        expect(batch.description).to eq "foobar"
+        expect(batch.properties).to eq({ foo: "bar" })
+
+        GoodJob.perform_inline
+
+        last_job = GoodJob::Job.order(:created_at).last
+        expect(last_job).to have_attributes(job_class: 'BatchCallbackJob')
+        expect(last_job.error).to be_nil
+      end
+    end
+  end
+
+  describe 'complex batching' do
+    it 'can be used as instance object' do
+      batch = GoodJob::Batch.new
+      batch.on_finish = "BatchCallbackJob"
+      batch.callback_queue_name = "custom_queue"
+      batch.callback_priority = 10
+
+      expect(batch).not_to be_persisted
+      expect(batch).not_to be_enqueued
+
+      # addr jobs to the batch
+      batch.add do
+        TestJob.perform_later
+      end
+
+      expect(batch).to be_persisted
+      expect(batch).not_to be_enqueued
+
+      # it's ok for the jobs to already be run; this is heavily asynchronous
+      GoodJob.perform_inline
+
+      batch.enqueue
+      expect(batch.enqueued_at).to be_within(1.second).of(Time.current)
+
+      GoodJob.perform_inline("custom_queue") # for the callback job
+
+      callback_job = GoodJob::Job.order(:created_at).last
+      expect(callback_job).to have_attributes(
+        batch_callback_id: batch.id,
+        job_class: 'BatchCallbackJob',
+        priority: 10,
+        queue_name: "custom_queue"
+      )
+    end
+  end
+
+  context 'when running inline' do
+    let(:adapter) { GoodJob::Adapter.new(execution_mode: :inline) }
+
+    before do
+      stub_const 'RecursiveJob', (Class.new(ActiveJob::Base) do
+        def perform(recurse)
+          RecursiveJob.perform_later(false) if recurse
+        end
+      end)
+    end
+
+    it 'does not unintentionally add sub-enqueued job to the batch' do
+      batch = GoodJob::Batch.enqueue do
+        RecursiveJob.perform_later(true)
+      end
+
+      expect(GoodJob::Job.count).to eq 2
+      expect(batch.active_jobs.count).to eq 1
+    end
+  end
+
+  describe 'complex recursive batching' do
+    let(:adapter) { GoodJob::Adapter.new(execution_mode: :inline) }
+
+    before do
+      stub_const 'DONE', Concurrent::AtomicBoolean.new(false)
+      stub_const 'SimpleJob', (Class.new(ActiveJob::Base) do
+        def perform
+        end
+      end)
+      stub_const 'MyBatchJob', (Class.new(ActiveJob::Base) do
+        def perform(batch, _options = {})
+          case batch.properties[:stage]
+          when 1
+            batch.enqueue(stage: 2) do
+              3.times { SimpleJob.perform_later }
+            end
+          when 2
+            batch.enqueue(stage: 3) do
+              7.times { SimpleJob.perform_later }
+            end
+          else
+            DONE.make_true
+          end
+        end
+      end)
+    end
+
+    it 'can enqueue multiple jobs' do
+      batch = GoodJob::Batch.enqueue(on_finish: "MyBatchJob", stage: 1)
+      GoodJob.perform_inline
+
+      expect(DONE.value).to be true
+      expect(batch.active_jobs.count).to eq 10
+      expect(batch.callback_active_jobs.count).to eq 3
+    end
+  end
+
+  describe 'all callbacks are called and retryable' do
+    before do
+      stub_const 'RetryableError', Class.new(StandardError)
+      stub_const 'DiscardableError', Class.new(StandardError)
+      stub_const 'TestJob', (Class.new(ActiveJob::Base) do
+        def perform(*args, **kwargs)
+        end
+      end)
+      stub_const 'DiscardedJob', (Class.new(ActiveJob::Base) do
+        discard_on 'DiscardableError'
+
+        def perform(*_args, **_kwargs)
+          raise DiscardableError
+        end
+      end)
+      stub_const 'RetriedJob', (Class.new(ActiveJob::Base) do
+        retry_on 'RetryableError', wait: 0, attempts: 2
+
+        def perform(*_args, **_kwargs)
+          raise RetryableError if executions == 1
+        end
+      end)
+    end
+
+    it 'calls discard callbacks' do
+      batch = GoodJob::Batch.enqueue(on_finish: "RetriedJob", on_success: "RetriedJob", on_discard: "RetriedJob", user: 'Alice') do
+        DiscardedJob.perform_later
+      end
+      GoodJob.perform_inline
+
+      expect(GoodJob::Job.count).to eq 3
+      expect(GoodJob::Execution.count).to eq 5
+      expect(GoodJob::Job.where(batch_id: batch.id).count).to eq 1
+      expect(GoodJob::Job.where(batch_callback_id: batch.id).count).to eq 2
+
+      callback_arguments = GoodJob::Job.where(batch_callback_id: batch.id).map { |job| job.active_job.arguments.second }
+      expect(callback_arguments).to contain_exactly({ event: :discard }, { event: :finish })
+    end
+
+    it 'calls success callbacks' do
+      batch = GoodJob::Batch.enqueue(on_finish: "RetriedJob", on_success: "RetriedJob", on_discard: "RetriedJob", user: 'Alice') do
+        TestJob.perform_later
+      end
+      GoodJob.perform_inline
+
+      expect(GoodJob::Job.count).to eq 3
+      expect(GoodJob::Execution.count).to eq 5
+      expect(GoodJob::Job.where(batch_id: batch.id).count).to eq 1
+      expect(GoodJob::Job.where(batch_callback_id: batch.id).count).to eq 2
+
+      callback_arguments = GoodJob::Job.where(batch_callback_id: batch.id).map { |job| job.active_job.arguments.second }
+      expect(callback_arguments).to contain_exactly({ event: :success }, { event: :finish })
+    end
+  end
+
+  describe 'aggressive async batching' do
+    it 'can execute multiple jobs' do
+      allow(GoodJob.configuration).to receive(:max_threads).and_return(15)
+      capsule = GoodJob::Capsule.new(configuration: GoodJob.configuration)
+      adapter = GoodJob::Adapter.new(execution_mode: :async_all, _capsule: capsule)
+
+      ActiveJob::Base.queue_adapter = adapter
+      expect(ActiveJob::Base.queue_adapter.execute_async?).to be true
+
+      stub_const 'TestJob', (Class.new(ActiveJob::Base) do
+        retry_on('ExpectedError', wait: 0, attempts: 2) { nil }
+
+        def perform(id)
+          sleep(1)
+          raise ExpectedError if rand(10) == 1
+          raise ExpectedError if id == 25
+        end
+      end)
+
+      batch = GoodJob::Batch.new
+      batch.on_discard = "BatchCallbackJob"
+      batch.on_finish = "BatchCallbackJob"
+      batch.enqueue do
+        50.times { |i| TestJob.perform_later(i) }
+      end
+
+      wait_until(max: 30) { expect(GoodJob::Job.finished.count).to eq 52 }
+      capsule.shutdown(timeout: -1)
+    end
+  end
+
+  describe 'job that errors once then succeeds' do
+    before do
+      stub_const "TestJob", (Class.new(ActiveJob::Base) do
+        retry_on StandardError, wait: 0, attempts: Float::INFINITY
+
+        def perform
+          raise 'failing' if executions < 2
+        end
+      end)
+
+      stub_const "TestJob::SuccessCallbackJob", (Class.new(ActiveJob::Base) do
+        def perform(_batch, _params)
+          nil
+        end
+      end)
+
+      stub_const "TestJob::DiscardCallbackJob", (Class.new(ActiveJob::Base) do
+        def perform(_batch, _params)
+          nil
+        end
+      end)
+    end
+
+    it 'calls the success callbacks' do
+      batch = GoodJob::Batch.new
+      batch.on_success = 'TestJob::SuccessCallbackJob'
+      batch.on_discard = 'TestJob::DiscardCallbackJob'
+      batch.add do
+        TestJob.perform_later
+      end
+      batch.enqueue
+
+      GoodJob.perform_inline
+
+      batch.reload
+      expect(batch).to be_succeeded
+      expect(batch).to be_jobs_finished
+      expect(batch.callback_active_jobs.count).to eq 1
+      expect(batch.callback_active_jobs.first).to be_a TestJob::SuccessCallbackJob
+      expect(batch.finished_at).to be_present
+
+      job, callback_job = GoodJob::Job.order(:created_at).to_a
+      expect(job.status).to eq :succeeded
+      expect(job.performed_at).to be_present
+      expect(job.finished_at).to be_present
+
+      job_executions = job.executions.order(:created_at).to_a
+      expect(job_executions.size).to eq 2
+      expect(job_executions.first.status).to eq :discarded
+      expect(job_executions.last.status).to eq :succeeded
+
+      expect(callback_job.job_class).to eq 'TestJob::SuccessCallbackJob'
+      expect(callback_job.status).to eq :succeeded
+    end
+  end
+
+  describe 'adding the currently executing job to a new batch' do
+    it 'assigns the currently executing job and child jobs to a new batch' do
+      stub_const 'RESULTS', Concurrent::Array.new
+      stub_const 'ChildJob', (Class.new(ActiveJob::Base) do
+        def perform
+        end
+      end)
+
+      stub_const 'ParentJob', (Class.new(ActiveJob::Base) do
+        include GoodJob::ActiveJobExtensions::Batches
+
+        def perform
+          new_batch = GoodJob::Batch.new(on_finish: 'BatchCallbackJob')
+          new_batch.add(self)
+
+          # Check that the batch extension accessor and the underlying
+          # GoodJob::Job record both reflect the updated batch.
+          RESULTS << batch&.id
+          RESULTS << GoodJob::CurrentThread.job.batch_id
+          RESULTS << GoodJob::CurrentThread.job.batch&.id
+
+          new_batch.add(ChildJob.new)
+          new_batch.enqueue
+        end
+      end)
+
+      parent_active_job = ParentJob.perform_later
+      expect(GoodJob::Job.find_by(active_job_id: parent_active_job.job_id).batch_id).to be_nil
+
+      GoodJob.perform_inline
+
+      parent_good_job = GoodJob::Job.find_by(active_job_id: parent_active_job.job_id)
+      expect(parent_good_job.batch_id).to be_present
+      expect(RESULTS).to eq [parent_good_job.batch_id, parent_good_job.batch_id, parent_good_job.batch_id]
+
+      child_good_job = GoodJob::Job.where(job_class: 'ChildJob').first
+      expect(child_good_job.batch_id).to eq parent_good_job.batch_id
+
+      batch = GoodJob::Batch.find(parent_good_job.batch_id)
+      expect(batch).to be_finished
+      expect(batch.active_jobs.count).to eq 2
+      expect(GoodJob::Job.where(job_class: 'BatchCallbackJob').count).to eq 1
+    end
+
+    it 'makes the batch accessible via self.batch within perform' do
+      stub_const 'ParentJob', (Class.new(ActiveJob::Base) do
+        include GoodJob::ActiveJobExtensions::Batches
+
+        def perform
+          new_batch = GoodJob::Batch.new(on_finish: 'BatchCallbackJob')
+          new_batch.add(self)
+          RESULTS << batch&.id
+          new_batch.enqueue
+        end
+      end)
+
+      stub_const 'RESULTS', Concurrent::Array.new
+      ParentJob.perform_later
+      GoodJob.perform_inline
+
+      parent_good_job = GoodJob::Job.where(job_class: 'ParentJob').first
+      expect(RESULTS.first).to eq parent_good_job.batch_id
+
+      batch = GoodJob::Batch.find(parent_good_job.batch_id)
+      expect(batch).to be_finished
+      expect(GoodJob::Job.where(job_class: 'BatchCallbackJob').count).to eq 1
+    end
+  end
+
+  describe 'adding to an existing batch' do
+    it 'adds jobs to the existing batch' do
+      batch = GoodJob::Batch.new(metadata: 'foo')
+      batch.enqueue { TestJob.perform_later }
+
+      GoodJob::Batch.find(batch.id).enqueue { TestJob.perform_later }
+
+      batch = GoodJob::Batch.find(batch.id)
+      expect(batch.active_jobs.count).to eq 2
+    end
+  end
+
+  describe 'retrying a discarded batch' do
+    it 'retries all discarded jobs in the batch' do
+      batch = GoodJob::Batch.enqueue do
+        TestJob.perform_later(error: true)
+      end
+
+      GoodJob.perform_inline
+
+      batch.reload
+      expect(batch).to be_discarded
+
+      expect { batch.retry }.to change { GoodJob::Job.discarded.count }.by(-1)
+    end
+  end
+
+  describe 'batch deletion' do
+    it 'deletes batches only after their callback jobs have completed' do
+      batch = GoodJob::Batch.new
+      batch.on_finish = "BatchCallbackJob"
+      batch.enqueue do
+        TestJob.perform_later
+      end
+
+      GoodJob.perform_inline
+
+      batch.reload
+      expect(batch.jobs_finished_at).to be_present
+      expect(batch.finished_at).to be_within(1.second).of(Time.current)
+    end
+  end
+
+  describe 'Batch.enqueue_all' do
+    it 'executes jobs and fires callbacks for all batches' do
+      batch_1 = GoodJob::Batch.new(on_finish: "BatchCallbackJob")
+      batch_2 = GoodJob::Batch.new(on_finish: "BatchCallbackJob")
+      job1a = TestJob.new
+      job1b = TestJob.new
+      job2a = TestJob.new
+
+      GoodJob::Batch.enqueue_all([
+                                   [batch_1, [job1a, job1b]],
+                                   [batch_2, [job2a]],
+                                 ])
+
+      # Verify correct batch_id assignment before execution
+      expect(GoodJob::Job.find_by(active_job_id: job1a.job_id).batch_id).to eq batch_1.id
+      expect(GoodJob::Job.find_by(active_job_id: job2a.job_id).batch_id).to eq batch_2.id
+
+      GoodJob.perform_inline
+
+      batch_1.reload
+      batch_2.reload
+      expect(batch_1).to be_finished
+      expect(batch_2).to be_finished
+      expect(batch_1.callback_active_jobs.count).to eq 1
+      expect(batch_2.callback_active_jobs.count).to eq 1
+    end
+
+    it 'handles mixed batches: some with jobs, some empty, callbacks fire for all' do
+      batch_with_jobs = GoodJob::Batch.new(on_finish: "BatchCallbackJob")
+      batch_empty = GoodJob::Batch.new(on_finish: "BatchCallbackJob")
+
+      GoodJob::Batch.enqueue_all([
+                                   [batch_with_jobs, [TestJob.new]],
+                                   [batch_empty, []],
+                                 ])
+
+      GoodJob.perform_inline
+
+      batch_with_jobs.reload
+      batch_empty.reload
+      expect(batch_with_jobs.callback_active_jobs.count).to eq 1
+      expect(batch_empty.callback_active_jobs.count).to eq 1
+    end
+
+    context 'when running inline' do
+      let(:adapter) { GoodJob::Adapter.new(execution_mode: :inline) }
+
+      it 'executes jobs inline and callbacks fire' do
+        batch = GoodJob::Batch.new(on_finish: "BatchCallbackJob")
+
+        GoodJob::Batch.enqueue_all([[batch, [TestJob.new, TestJob.new]]])
+
+        batch.reload
+        expect(batch).to be_finished
+        expect(batch.callback_active_jobs.count).to eq 1
+      end
+    end
+
+    it 'round-trips batch properties through the database' do
+      batch = GoodJob::Batch.new(on_finish: "BatchCallbackJob", properties: { user: 'Alice' })
+      GoodJob::Batch.enqueue_all([[batch, [TestJob.new]]])
+
+      GoodJob.perform_inline
+
+      reloaded = GoodJob::Batch.find(batch.id)
+      expect(reloaded.properties).to eq({ user: 'Alice' })
+      expect(reloaded).to be_finished
+    end
+  end
+end

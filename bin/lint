@@ -1,0 +1,71 @@
+#!/usr/bin/env ruby
+
+require 'fileutils'
+require 'optparse'
+
+options = {}
+OptionParser.new do |opt|
+  opt.on('-n', '--nofix', 'Do not fix') { |o| options[:nofix] = o }
+  opt.on('-t', '--todo', 'Generate todo file') { |o| options[:todo] = o }
+end.parse!
+
+GEM_ROOT = File.expand_path('..', __dir__)
+
+def system!(*args, failure: nil)
+  system(*args) || abort("\n== Command #{args} failed ==#{failure ? "\n\n#{failure}" : ''}}")
+end
+
+FileUtils.chdir GEM_ROOT do
+  puts "\n== Sorbet =="
+
+  system! "bundle exec srb tc", failure: <<~MESSAGE
+    You may need to run one of the following commands
+      1. Regenerate gem RBIs by running `bin/tapioca gem --all --verbose` and `bin/tapioca annotations`
+      2. Generate RBIs for DSLs by running `bin/tapioca dsl`
+      3. If the missing constants are defined in files that a gem does not load by default,
+         manually require those files in `sorbet/tapioca/require.rb` and regenerate gem RBIs
+      4. Manually create an RBI shim defining the missing constants
+      5. Add files to sorbet/rbi/todo.rbi or `bin/tapioca todo` (though that's being deprecated)
+  MESSAGE
+
+  puts "\n== Rubocop =="
+
+  flags = []
+  if options[:todo]
+    flags << '--auto-gen-config'
+  elsif !options[:nofix]
+    flags << '--autocorrect'
+  else
+    flags << '--parallel'
+  end
+
+  system! "bundle exec rubocop --no-server #{flags.join(' ')}"
+
+  puts "\n== YARD =="
+  system! "bundle exec yard stats --no-cache --fail-on-warning"
+
+  puts "\n== Herb =="
+  system! "bundle exec herb analyze app"
+
+  puts "\n== ERB Lint =="
+  if options[:nofix]
+    system!("bundle exec erb_lint app/views")
+  else
+    # Must run twice to run all linters
+    # https://github.com/Shopify/erb-lint/issues/145
+    puts "Running ERB Lint with autocorrectable linters"
+    system!("bundle exec erb_lint --autocorrect app/views")
+
+    puts "\nRunning ERB Lint with all linters"
+    system!("bundle exec erb_lint app/views")
+  end
+
+  puts "\n== Markdown Lint =="
+  system! "bundle exec mdl --style .mdstyle.rb README.md"
+
+  puts "\n== i18n-tasks health =="
+  system! "bin/i18n-tasks health"
+
+  puts "\n== Brakeman =="
+  system! "bundle exec brakeman --no-pager"
+end

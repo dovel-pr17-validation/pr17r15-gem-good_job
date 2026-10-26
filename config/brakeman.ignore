@@ -1,0 +1,144 @@
+{
+  "ignored_warnings": [
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "36e67d6562e4bcca3a1203659228a37d233a1b6012c9df77f4eade772075459b",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/models/concerns/good_job/advisory_lockable.rb",
+      "line": 254,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "joins(\"LEFT JOIN pg_locks ON pg_locks.locktype = 'advisory'\\n  AND pg_locks.objsubid = 1\\n  AND pg_locks.classid = #{advisory_lock_classid_sql(\"#{_quoted_table_name_string} || '-' || #{quoted_table_name}.#{adapter_class.quote_column_name(_advisory_lockable_column)}::text\")}\\n  AND pg_locks.objid = #{advisory_lock_objid_sql(\"#{_quoted_table_name_string} || '-' || #{quoted_table_name}.#{adapter_class.quote_column_name(_advisory_lockable_column)}::text\")}\\n\".squish)",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "GoodJob",
+        "method": null
+      },
+      "user_input": "advisory_lock_classid_sql(\"#{_quoted_table_name_string} || '-' || #{quoted_table_name}.#{adapter_class.quote_column_name(_advisory_lockable_column)}::text\")",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": "Values are quoted identifiers and an escaped table name string; not user input."
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "3923f99345d151f54b98b1089f407cfd4f9142a92147aadf5f430fa614554db4",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/models/concerns/good_job/advisory_lockable.rb",
+      "line": 254,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "joins(\"LEFT JOIN pg_locks ON pg_locks.locktype = 'advisory'\\n  AND pg_locks.objsubid = 1\\n  AND pg_locks.classid = #{advisory_lock_classid_sql(\"#{_quoted_table_name_string} || '-' || #{quoted_table_name}.#{adapter_class.quote_column_name(_advisory_lockable_column)}::text\")}\\n  AND pg_locks.objid = #{advisory_lock_objid_sql(\"#{_quoted_table_name_string} || '-' || #{quoted_table_name}.#{adapter_class.quote_column_name(_advisory_lockable_column)}::text\")}\\n\".squish)",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "GoodJob::AdvisoryLockable",
+        "method": null
+      },
+      "user_input": "advisory_lock_classid_sql(\"#{_quoted_table_name_string} || '-' || #{quoted_table_name}.#{adapter_class.quote_column_name(_advisory_lockable_column)}::text\")",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": "Values are quoted identifiers and an escaped table name string; not user input."
+    },
+    {
+      "warning_type": "Dangerous Eval",
+      "warning_code": 13,
+      "fingerprint": "f7e62770ef61ea7bb2b3a0a8c19b3fa6f869fbaa51322cb56eb86f21b384ba5a",
+      "check_name": "Evaluation",
+      "message": "Dynamic string evaluated as code",
+      "file": "lib/good_job/log_subscriber.rb",
+      "line": 365,
+      "link": "https://brakemanscanner.org/docs/warning_types/dangerous_eval/",
+      "code": "class_eval(\"        def #{level}(progname = nil, tags: [], &block)   # def info(progname = nil, tags: [], &block)\\n          return unless logger                           #   return unless logger\\n                                                         #\\n          tag_logger(*tags) do                           #   tag_logger(*tags) do\\n            logger.#{level}(progname, &block)            #     logger.info(progname, &block)\\n          end                                            #   end\\n        end                                              #\\n\", \"lib/good_job/log_subscriber.rb\", (365 + 1))",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "LogSubscriber",
+        "method": null
+      },
+      "user_input": null,
+      "confidence": "Weak",
+      "cwe_id": [
+        913,
+        95
+      ],
+      "note": ""
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "c57f2525e5d0780a0bcb460502f1b3ebceb9992885466f45b4035ab670c628d9",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/models/good_job/job.rb",
+      "line": 194,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "Arel.sql(\"(CASE #{queues.map.with_index do\n sanitize_sql_array([\"WHEN #{\"#{quoted_table_name}.#{adapter_class.quote_column_name(\"queue_name\")}\"} = ? THEN ?\", queue_name, index])\n end.join(\" \")} ELSE #{queues.size} END)\")",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Job",
+        "method": null
+      },
+      "user_input": "queues.map.with_index do\n sanitize_sql_array([\"WHEN #{\"#{quoted_table_name}.#{adapter_class.quote_column_name(\"queue_name\")}\"} = ? THEN ?\", queue_name, index])\n end.join(\" \")",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": "Developer provided value, queue_name, is sanitized; identifier is quoted via Rails quoted_table_name and quote_column_name."
+    },
+    {
+      "warning_type": "Command Injection",
+      "warning_code": 14,
+      "fingerprint": "dbb80167f57edebfd9da72e1278d425095a0329755e24d3c50e0fda6bb21c097",
+      "check_name": "Execute",
+      "message": "Possible command injection",
+      "file": "app/models/good_job/process.rb",
+      "line": 32,
+      "link": "https://brakemanscanner.org/docs/warning_types/command_injection/",
+      "code": "`ps -o pid,rss -p #{pid.to_i}`",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Process",
+        "method": null
+      },
+      "user_input": "pid.to_i",
+      "confidence": "Medium",
+      "cwe_id": [
+        77
+      ],
+      "note": ""
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "e3cc5489d3e3e81f35347b7530d5743fbac8491ab612ceec0d034e22656269ed",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/models/good_job/job/lockable.rb",
+      "line": 102,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "unscoped.find_by_sql([\"WITH candidate AS #{(\"MATERIALIZED \" or \"\")}(#{select(:id).lock(\"FOR NO KEY UPDATE SKIP LOCKED\").to_sql})\\nUPDATE #{quoted_table_name}\\nSET locked_by_id = ?,\\n    locked_at = ?,\\n    lock_type = ?\\nFROM (\\n  SELECT id FROM candidate\\n  WHERE pg_try_advisory_lock(#{\"('x' || substr(md5(#{_quoted_table_name_string} || '-' || id::text), 1, 16))::bit(64)::bigint\"})\\n) AS locked\\nWHERE #{quoted_table_name}.id = locked.id\\nRETURNING #{quoted_table_name}.*\\n\".squish, locked_by_id, locked_at, lock_types[lock_type.to_s]])",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "GoodJob::Job",
+        "method": "with_hybrid_lock_claim"
+      },
+      "user_input": "_quoted_table_name_string",
+      "confidence": "Weak",
+      "cwe_id": [
+        89
+      ],
+      "note": "Table name is quoted via quoted_table_name (Rails); advisory lock expression uses _quoted_table_name_string (escaped); candidate SQL is Rails-generated; values are parameterized bindings."
+    }
+  ],
+  "brakeman_version": "8.0.4"
+}

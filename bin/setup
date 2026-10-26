@@ -1,0 +1,41 @@
+#!/usr/bin/env ruby
+require 'fileutils'
+
+# path to your application root.
+GEM_ROOT = File.expand_path('..', __dir__)
+APP_ROOT = File.expand_path('../demo', __dir__)
+
+def system!(*args)
+  system(*args) || abort("\n== Command #{args} failed ==")
+end
+
+FileUtils.chdir GEM_ROOT do
+  puts "\n== Ruby Version =="
+  puts "Development .ruby-version: #{File.read('.ruby-version').strip}"
+  puts "Current Ruby: #{RUBY_VERSION}"
+end
+
+FileUtils.chdir GEM_ROOT do
+  puts "\n== Installing gem dependencies =="
+  system!('bundle install')
+end
+
+FileUtils.chdir GEM_ROOT do
+  git_dir = `git rev-parse --git-dir 2>/dev/null`.strip
+  git_common_dir = `git rev-parse --git-common-dir 2>/dev/null`.strip
+  runtime_log = 'tmp/parallel_runtime_rspec.log'
+  main_runtime_log = File.join(File.expand_path('..', git_common_dir), runtime_log)
+  if git_dir != git_common_dir && File.exist?(main_runtime_log) && !File.exist?(runtime_log)
+    puts "\n== Copying RSpec runtime log from main worktree =="
+    FileUtils.mkdir_p('tmp')
+    FileUtils.cp(main_runtime_log, runtime_log)
+  end
+end
+
+FileUtils.chdir APP_ROOT do
+  puts "\n== Setting up database =="
+  system!('bin/rails db:setup')
+  system!('bin/rails db:test:prepare')
+  system!('bin/rails db:migrate')
+  system!('bin/rails parallel:create parallel:load_schema')
+end

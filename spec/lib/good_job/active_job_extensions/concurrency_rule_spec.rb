@@ -1,0 +1,367 @@
+# frozen_string_literal: true
+
+require 'rails_helper'
+
+RSpec.describe GoodJob::ActiveJobExtensions::Concurrency do
+  before do
+    ActiveJob::Base.queue_adapter = GoodJob::Adapter.new(execution_mode: :external)
+  end
+
+  def stub_job_class(rule, class_name: 'TestJob')
+    stub_const class_name, (Class.new(ActiveJob::Base) do
+      include GoodJob::ActiveJobExtensions::Concurrency
+
+      good_job_concurrency_rule(**rule)
+
+      def perform(name:)
+      end
+    end)
+  end
+
+  describe 'Labels module inclusion' do
+    before { stub_job_class({}) }
+
+    it 'includes the Labels module' do
+      expect(TestJob.ancestors).to include(GoodJob::ActiveJobExtensions::Labels)
+    end
+  end
+
+  describe '.good_job_concurrency_rule' do
+    let(:test_rule) { { label: -> { arguments.first[:name] }, enqueue_limit: 1 } }
+
+    before { stub_job_class(test_rule) }
+
+    it 'stores rules on the class' do
+      expect(TestJob.good_job_concurrency_rules).to be_an(Array)
+      expect(TestJob.good_job_concurrency_rules.first).to be_a(GoodJob::ActiveJobExtensions::Concurrency::Rule)
+    end
+  end
+
+  describe 'without labels' do
+    let(:test_rule) { { enqueue_limit: 1 } }
+
+    before do
+      stub_job_class(test_rule)
+      stub_job_class(test_rule, class_name: 'AnotherTestJob')
+    end
+
+    it 'enforces concurrency across job classes' do
+      expect(TestJob.perform_later(name: "Alice")).to be_present
+      expect(AnotherTestJob.perform_later(name: "Alice")).to be false
+    end
+  end
+
+  describe 'label application and enqueue limits' do
+    let(:test_rule) { { label: -> { arguments.first[:name] }, enqueue_limit: 1 } }
+
+    before { stub_job_class(test_rule) }
+
+    it 'applies label and enforces enqueue limit' do
+      expect(TestJob.set(good_job_labels: ["Alice"]).perform_later(name: "Alice")).to be_present
+      expect(TestJob.set(good_job_labels: ["Alice"]).perform_later(name: "Alice")).to be false
+
+      job = GoodJob::Job.find_by(job_class: 'TestJob')
+      expect(job.labels).to include("Alice")
+    end
+  end
+
+  describe 'labels applied in enqueue callbacks' do
+    let(:test_rule) { { label: -> { "TestJob-#{arguments.first[:name]}" }, total_limit: 1 } }
+
+    def concurrency_callbacks(klass)
+      klass._enqueue_callbacks.select { |cb| cb.filter == :_good_job_concurrency_before_enqueue }
+    end
+
+    before { stub_job_class(test_rule) }
+
+    it 'checks rules after a before_enqueue defined later applies the label' do
+      TestJob.before_enqueue { |job| job.good_job_labels |= ["TestJob-#{job.arguments.first[:name]}"] }
+
+      expect(TestJob.perform_later(name: "Alice")).to be_present
+      expect(TestJob.perform_later(name: "Alice")).to be false
+      expect(TestJob.perform_later(name: "Bob")).to be_present
+      expect(GoodJob::Job.count).to eq 2
+    end
+
+    it 'checks rules after around_enqueue callbacks in subclasses' do
+      stub_const 'ChildJob', Class.new(TestJob)
+      ChildJob.around_enqueue do |job, block|
+        job.good_job_labels |= ["TestJob-#{job.arguments.first[:name]}"]
+        block.call
+      end
+
+      expect(ChildJob.perform_later(name: "Alice")).to be_present
+      expect(ChildJob.perform_later(name: "Alice")).to be false
+      expect(TestJob.perform_later(name: "Alice")).to be_present
+    end
+
+    it 'keeps the check last in subclasses when the parent adds callbacks' do
+      stub_const 'ChildJob', Class.new(TestJob)
+      ChildJob.before_enqueue { |job| job.good_job_labels |= ["child"] }
+      TestJob.before_enqueue { |job| job.good_job_labels |= ["parent"] }
+
+      [TestJob, ChildJob].each do |klass|
+        expect(klass._enqueue_callbacks.to_a.last.filter).to eq :_good_job_concurrency_before_enqueue
+        expect(concurrency_callbacks(klass).size).to eq 1
+      end
+    end
+
+    it 'does not duplicate the callbacks being defined' do
+      expect { TestJob.around_enqueue { |_job, block| block.call } }.to change { TestJob._enqueue_callbacks.count }.by(1)
+    end
+
+    it 'respects skip_callback in subclasses' do
+      stub_const 'ChildJob', Class.new(TestJob)
+      ChildJob.skip_callback(:enqueue, :before, :_good_job_concurrency_before_enqueue)
+      TestJob.before_enqueue { |job| job.good_job_labels |= ["TestJob-#{job.arguments.first[:name]}"] }
+      ChildJob.before_enqueue { |job| job.good_job_labels |= ["TestJob-#{job.arguments.first[:name]}"] }
+
+      expect(concurrency_callbacks(ChildJob)).to be_empty
+      expect(ChildJob.perform_later(name: "Alice")).to be_present
+      expect(ChildJob.perform_later(name: "Alice")).to be_present
+    end
+
+    it 'keeps conditions from a conditional skip_callback' do
+      stub_const 'ChildJob', Class.new(TestJob)
+      ChildJob.skip_callback(:enqueue, :before, :_good_job_concurrency_before_enqueue, if: -> { arguments.first[:name] == "Skip" })
+      ChildJob.before_enqueue { |job| job.good_job_labels |= ["TestJob-#{job.arguments.first[:name]}"] }
+
+      expect(ChildJob._enqueue_callbacks.to_a.last.filter).to eq :_good_job_concurrency_before_enqueue
+      expect(ChildJob.perform_later(name: "Skip")).to be_present
+      expect(ChildJob.perform_later(name: "Skip")).to be_present
+      expect(ChildJob.perform_later(name: "Alice")).to be_present
+      expect(ChildJob.perform_later(name: "Alice")).to be false
+    end
+
+    it 'runs prepended callbacks before the check' do
+      TestJob.before_enqueue(prepend: true) { |job| job.good_job_labels |= ["TestJob-#{job.arguments.first[:name]}"] }
+
+      expect(TestJob.perform_later(name: "Alice")).to be_present
+      expect(TestJob.perform_later(name: "Alice")).to be false
+    end
+  end
+
+  describe 'apply_label:' do
+    let(:test_rule) { { label: -> { arguments.first[:name] && "TestJob-#{arguments.first[:name]}" }, apply_label: true, total_limit: 1 } }
+
+    before { stub_job_class(test_rule) }
+
+    it 'applies the resolved label to jobs and enforces the rule' do
+      expect(TestJob.perform_later(name: "Alice")).to be_present
+      expect(TestJob.perform_later(name: "Alice")).to be false
+      expect(TestJob.perform_later(name: "Bob")).to be_present
+
+      expect(GoodJob::Job.order(:created_at).map(&:labels)).to eq [["TestJob-Alice"], ["TestJob-Bob"]]
+    end
+
+    it 'keeps the applied label when labels are passed when enqueuing' do
+      TestJob.set(good_job_labels: ["other"]).perform_later(name: "Alice")
+
+      expect(GoodJob::Job.last.labels).to eq %w[other TestJob-Alice]
+      expect(TestJob.set(good_job_labels: []).perform_later(name: "Alice")).to be false
+    end
+
+    # activerecord-jdbc-adapter's ArrayEncoder calls the deprecated `ActiveRecord::Base.connection`
+    # when quoting the labels array in `insert_all`, which the test app disallows.
+    it 'applies the label to jobs enqueued in bulk', :skip_if_java do
+      stub_job_class({ label: -> { "TestJob-#{arguments.first[:name]}" }, apply_label: true, perform_limit: 1 })
+      GoodJob::Bulk.enqueue([TestJob.new(name: "Alice"), TestJob.new(name: "Bob")])
+
+      expect(GoodJob::Job.pluck(:labels)).to contain_exactly(["TestJob-Alice"], ["TestJob-Bob"])
+    end
+
+    it 'performs jobs after deserializing them' do
+      stub_job_class({ label: -> { "TestJob-#{arguments.first[:name]}" }, apply_label: true, perform_limit: 1 })
+      TestJob.perform_later(name: "Alice")
+
+      expect { GoodJob.perform_inline }.not_to raise_error
+      expect(GoodJob::Job.last).to have_attributes(finished_at: be_present, error: nil, labels: ["TestJob-Alice"])
+    end
+
+    it 'does not apply a nil label' do
+      TestJob.perform_later(name: nil)
+
+      expect(GoodJob::Job.last.labels).to be_nil
+    end
+
+    it 'does not apply the label by default' do
+      stub_job_class({ label: "unapplied", total_limit: 1 })
+      TestJob.perform_later(name: "Alice")
+
+      expect(GoodJob::Job.last.labels).to be_nil
+    end
+
+    it 'requires a label' do
+      expect { TestJob.good_job_concurrency_rule(apply_label: true, total_limit: 1) }.to raise_error(ArgumentError, /requires a `label:`/)
+    end
+  end
+
+  describe 'dynamic class-level labels' do
+    before do
+      stub_job_class({ label: -> { "TestJob-#{arguments.first[:name]}" }, total_limit: 1 })
+      TestJob.good_job_labels = [-> { "TestJob-#{arguments.first[:name]}" }]
+    end
+
+    it 'applies the label before enqueue-time checks' do
+      expect(TestJob.perform_later(name: "Alice")).to be_present
+      expect(TestJob.perform_later(name: "Alice")).to be false
+      expect(TestJob.perform_later(name: "Bob")).to be_present
+    end
+  end
+
+  describe 'label normalization' do
+    let(:test_rule) { { label: -> { arguments.first[:name] }, enqueue_limit: 1, perform_limit: 0 } }
+
+    before do
+      allow(GoodJob).to receive(:preserve_job_records).and_return(true)
+      stub_job_class(test_rule)
+    end
+
+    [42, :email, " email "].each do |label|
+      it "enforces enqueue and perform limits for #{label.inspect} after persistence" do
+        active_job = TestJob.set(good_job_labels: [label]).perform_later(name: label)
+        expect(active_job).to be_present
+        expect(TestJob.set(good_job_labels: [label.to_s.strip]).perform_later(name: label)).to be false
+
+        record = GoodJob::Job.find_by!(active_job_id: active_job.job_id)
+        expect(record.labels).to eq([label.to_s.strip])
+
+        GoodJob.perform_inline
+
+        expect(record.reload).not_to be_finished
+        expect(record.executions.last.error).to include('GoodJob::ActiveJobExtensions::Concurrency::ConcurrencyExceededError')
+      end
+    end
+
+    it 'skips rules when the job does not carry the normalized label' do
+      active_job = TestJob.set(good_job_labels: ["different"]).perform_later(name: 42)
+      GoodJob.perform_inline
+
+      expect(GoodJob::Job.find_by!(active_job_id: active_job.job_id)).to be_finished
+    end
+  end
+
+  describe 'rule-based throttles and perform limits' do
+    context 'with an enqueue throttle rule' do
+      let(:test_rule) { { label: -> { arguments.first[:name] }, enqueue_throttle: [1, 1.minute] } }
+
+      before { stub_job_class(test_rule) }
+
+      it 'does not enqueue if throttle period has not passed' do
+        expect(TestJob.set(good_job_labels: ["Alice"]).perform_later(name: "Alice")).to be_present
+        expect(TestJob.set(good_job_labels: ["Alice"]).perform_later(name: "Alice")).to be false
+        Timecop.travel(61.seconds.from_now) do
+          expect(TestJob.set(good_job_labels: ["Alice"]).perform_later(name: "Alice")).to be_present
+        end
+      end
+    end
+
+    context 'with a perform limit rule' do
+      let(:test_rule) { { label: -> { arguments.first[:name] }, perform_limit: 0 } }
+
+      before do
+        allow(GoodJob).to receive(:preserve_job_records).and_return(true)
+        stub_job_class(test_rule)
+      end
+
+      it 'errors and retries jobs if concurrency is exceeded' do
+        active_job = TestJob.set(good_job_labels: ["Alice"]).perform_later(name: "Alice")
+
+        performer = GoodJob::JobPerformer.new('*')
+        scheduler = GoodJob::Scheduler.new(performer, max_threads: 5)
+        5.times { scheduler.create_thread }
+
+        sleep_until(max: 10, increments_of: 0.5) do
+          GoodJob::Execution.where(active_job_id: active_job.job_id).finished.count >= 1
+        end
+        scheduler.shutdown
+
+        expect(GoodJob::Job.find_by(active_job_id: active_job.job_id).labels).to include("Alice")
+
+        expect(GoodJob::Execution.count).to be >= 1
+        expect(GoodJob::Execution.where("error LIKE '%GoodJob::ActiveJobExtensions::Concurrency::ConcurrencyExceededError%'")).to be_present
+      end
+    end
+
+    context 'with a perform throttle rule' do
+      let(:test_rule) { { label: "static", perform_throttle: [1, 1.minute] } }
+
+      before do
+        allow(GoodJob).to receive(:preserve_job_records).and_return(true)
+        stub_job_class(test_rule)
+      end
+
+      it 'does not perform if throttle period has not passed' do
+        TestJob.set(good_job_labels: ["static"]).perform_later(name: "Alice")
+        TestJob.set(good_job_labels: ["static"]).perform_later(name: "Alice")
+        TestJob.set(good_job_labels: ["static"]).perform_later(name: "Alice")
+        GoodJob.perform_inline
+
+        expect(GoodJob::Job.finished.count).to eq 1
+
+        Timecop.travel(61.seconds)
+        TestJob.set(good_job_labels: ["static"]).perform_later(name: "Alice")
+        GoodJob.perform_inline
+
+        expect(GoodJob::Job.finished.count).to eq 2
+
+        Timecop.travel(61.seconds)
+        GoodJob.perform_inline
+
+        expect(GoodJob::Job.finished.count).to eq 3
+      end
+    end
+
+    context 'with a perform throttle rule without a label' do
+      let(:test_rule) { { perform_throttle: [1, 1.minute] } }
+
+      before do
+        allow(GoodJob).to receive(:preserve_job_records).and_return(true)
+        stub_job_class(test_rule)
+      end
+
+      it 'does not perform if throttle period has not passed' do
+        TestJob.perform_later(name: "Alice")
+        TestJob.perform_later(name: "Alice")
+        GoodJob.perform_inline
+
+        expect(GoodJob::Job.finished.count).to eq 1
+      end
+    end
+
+    context 'with a multipart rule' do
+      let(:test_rule) { { label: -> { arguments.first[:name] }, enqueue_throttle: [1, 1.minute], perform_limit: 0 } }
+
+      before do
+        allow(GoodJob).to receive(:preserve_job_records).and_return(true)
+        stub_job_class(test_rule)
+      end
+
+      it 'enforces both enqueue throttle and perform limit' do
+        job_1 = TestJob.set(good_job_labels: ["Alice"]).perform_later(name: "Alice")
+        expect(job_1).to be_present
+        job_2 = TestJob.set(good_job_labels: ["Alice"]).perform_later(name: "Alice")
+        expect(job_2).to be false
+        GoodJob.perform_inline
+
+        Timecop.travel(61.seconds)
+        job_3 = TestJob.set(good_job_labels: ["Alice"]).perform_later(name: "Alice")
+        expect(job_3).to be_present
+        GoodJob.perform_inline
+
+        performer = GoodJob::JobPerformer.new('*')
+        scheduler = GoodJob::Scheduler.new(performer, max_threads: 5)
+        5.times { scheduler.create_thread }
+
+        sleep_until(max: 10, increments_of: 0.5) do
+          GoodJob::Execution.where(active_job_id: GoodJob::Job.last.id).finished.count >= 1
+        end
+        scheduler.shutdown
+
+        expect(GoodJob::Execution.where("error LIKE '%GoodJob::ActiveJobExtensions::Concurrency::ConcurrencyExceededError%'")).to be_present
+
+        expect(GoodJob::Job.finished.count).to eq 0
+      end
+    end
+  end
+end

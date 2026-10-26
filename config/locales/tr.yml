@@ -1,0 +1,343 @@
+---
+tr:
+  good_job:
+    actions:
+      destroy: Sil
+      discard: İptal Et
+      force_discard: Atmaya zorla
+      inspect: İncele
+      reschedule: Yeniden planla
+      retry: Tekrar dene
+    batches:
+      actions:
+        confirm_retry: Bu grubu yeniden denemek istediğinizden emin misiniz?
+        retry: Grubu yeniden dene
+      index:
+        older_batches: Daha eski toplu işlemler
+        title: Toplu İşlemler
+      jobs:
+        actions:
+          confirm_destroy: Bu işi silmek istediğinizden emin misiniz?
+          confirm_discard: Bu işi iptal etmek istediğinizden emin misiniz?
+          confirm_reschedule: Bu işi yeniden planlamak istediğinizden emin misiniz?
+          confirm_retry: Bu işi tekrar denemek istediğinizden emin misiniz?
+          destroy: İşi Sil
+          discard: İşi İptal Et
+          reschedule: İşi Yeniden Planla
+          retry: İşi Tekrar Dene
+          title: İşlemler
+        no_jobs_found: İş bulunamadı.
+      retry:
+        notice: Grup yeniden denendi
+      show:
+        attributes: Özellikler
+        batched_jobs: Toplu İşlenmiş İşler
+        callback_jobs: Geri Çağırma İşleri
+      table:
+        no_batches_found: Toplu İşlem bulunamadı.
+    cleaner:
+      index:
+        all: All
+        class: Class
+        exception: Exception
+        grouped_by_class: Discards grouped by Class
+        grouped_by_exception: Discards grouped by Exception
+        last_1_hour: Last 1 hour
+        last_24_hours: Last 24 hours
+        last_3_days: Last 3 days
+        last_3_hours: Last 3 hours
+        last_7_days: Last 7 days
+        title: Discard Cleaner
+        total: Total
+    concurrency_claims:
+      states:
+        granted: Verildi
+        promoted: Öne alındı
+        waiting: Bekliyor
+    cron_entries:
+      actions:
+        confirm_disable: Bu cron girişini devre dışı bırakmak istediğinizden emin misiniz?
+        confirm_enable: Bu cron girişini etkinleştirmek istediğinizden emin misiniz?
+        confirm_enqueue: Bu cron girişini hemen kuyruğa eklemek istediğinizden emin misiniz?
+        disable: Cron girişini devre dışı bırak
+        enable: Cron girişini etkinleştir
+        enqueue: Cron girişini hemen kuyruğa ekle
+      disable:
+        notice: Cron girişi devre dışı bırakıldı.
+      enable:
+        notice: Cron girişi etkinleştirildi.
+      enqueue:
+        notice: Cron girişi kuyruğa eklendi.
+      index:
+        no_cron_schedules_found: Planlanmış Cron bulunamadı.
+        title: Cron Planları
+      show:
+        cron_entry_key: Cron Giriş Anahtarı
+    datetime:
+      distance_in_words:
+        about_x_hours:
+          one: yaklaşık 1 saat
+          other: yaklaşık %{count} saat
+        about_x_months:
+          one: yaklaşık 1 ay
+          other: yaklaşık %{count} ay
+        about_x_years:
+          one: yaklaşık 1 yıl
+          other: yaklaşık %{count} yıl
+        almost_x_years:
+          one: neredeyse 1 yıl
+          other: neredeyse %{count} yıl
+        half_a_minute: yarım dakika
+        less_than_x_minutes:
+          one: 1 dakikadan az
+          other: "%{count} dakikadan az"
+        less_than_x_seconds:
+          one: 1 saniyeden az
+          other: "%{count} saniyeden az"
+        over_x_years:
+          one: 1 yıldan fazla
+          other: "%{count} yıldan fazla"
+        x_days:
+          one: 1 gün
+          other: "%{count} gün"
+        x_minutes:
+          one: 1 dakika
+          other: "%{count} dakika"
+        x_months:
+          one: 1 ay
+          other: "%{count} ay"
+        x_seconds:
+          one: 1 saniye
+          other: "%{count} saniye"
+        x_years:
+          one: 1 yıl
+          other: "%{count} yıl"
+    duration:
+      hours: "%{hour}sa %{min}d"
+      less_than_10_seconds: "%{sec} s"
+      milliseconds: "%{ms} ms"
+      minutes: "%{min}d %{sec}s"
+      seconds: "%{sec}s"
+    error_event:
+      discarded: Atılan
+      handled: işlenmiş
+      interrupted: kesintiye uğradı
+      retried: yeniden denendi
+      retry_stopped: Yeniden deneme durduruldu
+      unhandled: işlenmemiş
+    helpers:
+      relative_time:
+        future: "%{time} içinde"
+        past: "%{time} önce"
+    jobs:
+      actions:
+        confirm_destroy: Bu işi silmek istediğinizden emin misiniz?
+        confirm_discard: Bu işi iptal etmek istediğinizden emin misiniz?
+        confirm_force_discard: Bu işi zorla iptal etmek istediğinizden emin misiniz? İş atıldı olarak işaretlenecek ancak devam eden iş durdurulmayacak; ancak başarısızlık durumunda yeniden denenmeyecek.
+        confirm_reschedule: Bu işi yeniden planlamak istediğinizden emin misiniz?
+        confirm_retry: Bu işi tekrar denemek istediğinizden emin misiniz?
+        destroy: İşi Sil
+        discard: İşi İptal Et
+        force_discard: İşi zorla atmaya zorla
+        reschedule: İşi Yeniden Planla
+        retry: İşi Tekrar Dene
+      destroy:
+        notice: İş Silindi
+      discard:
+        notice: İş İptal Edildi
+      executions:
+        application_trace: Application Trace
+        full_trace: Full Trace
+        in_queue: sırada
+        recovery: kurtarma
+        runtime: çalışma süresi
+        title: İşlemler
+      force_discard:
+        notice: İş zorla atıldı. Çalışmaya devam edecek ancak arıza durumunda yeniden denenmeyecek
+      index:
+        job_pagination: İş sayfalandırması
+        older_jobs: Daha eski işler
+      reschedule:
+        notice: İş yeniden planlandı
+      retry:
+        notice: İş tekrar deneniyor
+      show:
+        jobs: İşler
+      table:
+        actions:
+          apply_to_all:
+            one: 1 işe uygula.
+            other: "%{count} işe uygula."
+          confirm_destroy_all: Seçili işleri silmek istediğinizden emin misiniz?
+          confirm_discard_all: Seçili işleri iptal etmek istediğinizden emin misiniz?
+          confirm_reschedule_all: Seçili işleri yeniden planlamak istediğinizden emin misiniz?
+          confirm_retry_all: Seçili işleri tekrar denemek istediğinizden emin misiniz?
+          destroy_all: Tümünü Sil
+          discard_all: Tümünü İptal Et
+          reschedule_all: Tümünü Yeniden Planla
+          retry_all: Tümünü Tekrar Dene
+          title: İşlemler
+        no_jobs_found: İş bulunamadı.
+        toggle_actions: İşlemleri Gizle/Göster
+        toggle_all_jobs: Tüm işleri Gizle/Göster
+    models:
+      batch:
+        created: Oluşturuldu
+        created_at: Oluşturma zamanı
+        discarded: İptal Edildi
+        discarded_at: İptal edilme zamanı
+        enqueued: Kuyruğa eklendi
+        enqueued_at: Kuyruğa ekleme zamanı
+        finished: Tamamlandı
+        finished_at: Tamamlanma zamanı
+        jobs: İşler
+        name: İsim
+      cron:
+        class: Sınıf
+        last_run: Son çalıştırma
+        next_scheduled: Sonraki planlama
+        schedule: Program
+        states:
+          active: Aktif
+          paused: Duraklatıldı
+        status: Durum
+      job:
+        arguments: Argümanlar
+        attempts: Denemeler
+        concurrency_claims: Eşzamanlılık talepleri
+        labels: Etiketler
+        priority: Öncelik
+        queue: Kuyruk
+    number:
+      format:
+        delimiter: ","
+        separator: "."
+      human:
+        decimal_units:
+          delimiter: ","
+          format: "%n%u"
+          precision: 3
+          separator: "."
+          units:
+            billion: Milyar
+            million: Milyon
+            quadrillion: Katrilyon
+            thousand: Bin
+            trillion: Trilyon
+            unit: ''
+    pauses:
+      index:
+        confirm_pause: "%{value} duraklatmak istediğinizden emin misiniz?"
+        confirm_unpause: "%{value} devam ettirmek istediğinizden emin misiniz?"
+        disabled: GoodJob'ın deneysel Duraklatma özelliği, performansı düşürebileceği için varsayılan olarak devre dışıdır. Etkinleştirmek için yapılandırın
+        job_class: İş sınıfı
+        label: Etiket
+        pause: Duraklat
+        queue: Kuyruk
+        title: Duraklatmalar
+        type: Duraklatma Türü
+        unpause: Devam Et
+        value: Değer
+    performance:
+      index:
+        chart_title: Toplam yürütme gecikmesi (saniye)
+        chart_title_queue: Ortalama kuyruk gecikmesi (saniye)
+        chart_title_total: Ortalama toplam gecikme (saniye)
+        execution_latency: Yürütme gecikmesi
+        executions: Yürütmeler
+        job_class: İş sınıfı
+        jobs: İşler
+        no_executions: Bu zaman aralığında yürütme yok.
+        queue_latency: Kuyruk gecikmesi
+        queue_name: Kuyruk adı
+        title: Performans
+        total_latency: Toplam gecikme
+      latency:
+        average: ort
+        maximum: maks
+        minimum: min
+      metric:
+        chart_metric: Grafik metriği
+        metric_options:
+          execution: Yürütme gecikmesi
+          queue: Kuyruk gecikmesi
+          total: Toplam gecikme
+      range:
+        bucket_size:
+          days: "%{count}g"
+          hours: "%{count}sa"
+          minutes: "%{count}dk"
+          months: "~%{count} ay"
+          seconds: "%{count}sn"
+          years: "~%{count}y"
+        chart_bucket_size: 'Grafiğin zaman ayrıntı düzeyi: %{size}'
+        custom_range: Özel
+        custom_range_hint: grafik üzerinde sürükleyin
+        end_time: Bitiş zamanı
+        open_time_ranges: Performans zaman aralıklarını aç
+        quick_ranges: Hızlı aralıklar
+        range_options:
+          1h: Son 1 saat
+          24h: Son 24 saat
+          6h: Son 6 saat
+          7d: Son 7 gün
+        reload_range: Performans verilerini yeniden yükle
+        start_time: Başlangıç zamanı
+        time_range: Performans zaman aralığı
+        time_zone: 'Saat dilimi:'
+      show:
+        execution_chart_title: Yürütme gecikmesi
+        queue_chart_title: Kuyruk gecikmesi
+        slow: Yavaş
+        title: Performans
+        total_chart_title: Toplam gecikme
+    processes:
+      index:
+        cron_enabled: Cron etkin
+        no_good_job_processes_found: GoodJob süreci bulunamadı.
+        process: Süreç
+        schedulers: Planlayıcılar
+        started: Başlangıç zamanı
+        title: Süreçler
+        updated: Güncellenmiş
+    shared:
+      boolean:
+        'false': Hayır
+        'true': Evet
+      error: Hata
+      filter:
+        all: Tümü
+        all_jobs: Tüm işler
+        all_queues: Tüm kuyruklar
+        clear: Temizle
+        job_name: İş adı
+        label: Etiket
+        placeholder: Sınıfa, iş kimliğine, iş parametrelerine ve hata metnine göre ara.
+        queue_name: Kuyruk adı
+        search: Ara
+      navbar:
+        batches: Toplu İşler
+        cleaner: Discard Cleaner
+        cron_schedules: Cron
+        jobs: İşler
+        live_poll: Anlık Güncelleme
+        name: "GoodJob 👍"
+        pauses: Duraklatmalar
+        performance: Verim
+        processes: Süreçler
+        theme:
+          auto: Oto
+          dark: Karanlık
+          light: Işık
+          theme: Tema
+      pending_migrations: GoodJob'ın bekleyen veritabanı güncellemeleri bulunuyor.
+      secondary_navbar:
+        inspiration: Unutmayın, siz de iyi bir iş yapıyorsunuz!
+        last_updated: Son güncelleme
+    status:
+      discarded: İptal Edildi
+      queued: Sırada
+      retried: Tekrar deneniyor
+      running: Çalışıyor
+      scheduled: Planlandı
+      succeeded: Başarılı

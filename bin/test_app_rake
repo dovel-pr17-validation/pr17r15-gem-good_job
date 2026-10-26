@@ -1,0 +1,5 @@
+#!/usr/bin/env ruby
+APP_PATH = File.expand_path('../demo/config/application', __dir__)
+ARGV << '-f' << File.expand_path('../demo/Rakefile', __dir__)
+require_relative '../demo/config/boot'
+require 'rails/commands'

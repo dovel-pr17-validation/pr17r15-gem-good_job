@@ -1,0 +1,345 @@
+---
+pt-BR:
+  good_job:
+    actions:
+      destroy: Excluir
+      discard: Descartar
+      force_discard: Forçar descarte
+      inspect: Inspecionar
+      reschedule: Reagendar
+      retry: Tentar novamente
+    batches:
+      actions:
+        confirm_retry: Tem certeza de que deseja tentar novamente este lote?
+        retry: Tentar novamente
+      index:
+        older_batches: Lotes antigos
+        title: Lotes
+      jobs:
+        actions:
+          confirm_destroy: Tem certeza de que deseja excluir esta tarefa?
+          confirm_discard: Tem certeza de que deseja descartar esta tarefa?
+          confirm_reschedule: Tem certeza de que deseja reagendar esta tarefa?
+          confirm_retry: Tem certeza de que deseja tentar novamente esta tarefa?
+          destroy: Excluir Tarefa
+          discard: Descartar Tarefa
+          reschedule: Reagendar Tarefa
+          retry: Tentar Tarefa Novamente
+          title: Ações
+        no_jobs_found: Nenhuma tarefa encontrada.
+      retry:
+        notice: O lote foi tentado novamente
+      show:
+        attributes: Atributos
+        batched_jobs: Tarefas em Lote
+        callback_jobs: Tarefas de Callback
+      table:
+        no_batches_found: Nenhum lote encontrado.
+    cleaner:
+      index:
+        all: Tudo
+        class: Classe
+        exception: Exceção
+        grouped_by_class: Descartes agrupados por Classe
+        grouped_by_exception: Descartes agrupados por Exceção
+        last_1_hour: Última hora
+        last_24_hours: Últimas 24 horas
+        last_3_days: Últimos 3 dias
+        last_3_hours: Últimas 3 horas
+        last_7_days: Últimos 7 dias
+        title: Limpeza de Descartes
+        total: Total
+    concurrency_claims:
+      states:
+        granted: Concedida
+        promoted: Promovida
+        waiting: Aguardando
+    cron_entries:
+      actions:
+        confirm_disable: Tem certeza de que deseja desativar esta tarefa programada?
+        confirm_enable: Tem certeza de que deseja ativar esta tarefa programada?
+        confirm_enqueue: Tem certeza de que deseja enfileirar esta tarefa programada agora?
+        disable: Desativar tarefa programada
+        enable: Ativar tarefa programada
+        enqueue: Enfileirar tarefa programada agora
+      disable:
+        notice: A tarefa programada foi desativada.
+      enable:
+        notice: A tarefa programada foi ativada.
+      enqueue:
+        notice: A tarefa programada foi enfileirada.
+      index:
+        no_cron_schedules_found: Nenhuma tarefa programada encontrada.
+        title: Tarefas Programadas
+      show:
+        cron_entry_key: Chave da Tarefa Programada
+    datetime:
+      distance_in_words:
+        about_x_hours:
+          one: cerca de 1 hora
+          other: cerca de %{count} horas
+        about_x_months:
+          one: cerca de 1 mês
+          other: cerca de %{count} meses
+        about_x_years:
+          one: cerca de 1 ano
+          other: cerca de %{count} anos
+        almost_x_years:
+          one: quase 1 ano
+          other: quase %{count} anos
+        half_a_minute: meio minuto
+        less_than_x_minutes:
+          one: menos de um minuto
+          other: menos de %{count} minutos
+        less_than_x_seconds:
+          one: menos de 1 segundo
+          other: menos de %{count} segundos
+        over_x_years:
+          one: mais de 1 ano
+          other: mais de %{count} anos
+        x_days:
+          one: 1 dia
+          other: "%{count} dias"
+        x_minutes:
+          one: 1 minuto
+          other: "%{count} minutos"
+        x_months:
+          one: 1 mês
+          other: "%{count} meses"
+        x_seconds:
+          one: 1 segundo
+          other: "%{count} segundos"
+        x_years:
+          one: 1 ano
+          other: "%{count} anos"
+    duration:
+      hours: "%{hour}h %{min}m"
+      less_than_10_seconds: "%{sec}s"
+      milliseconds: "%{ms}ms"
+      minutes: "%{min}m %{sec}s"
+      seconds: "%{sec}s"
+    error_event:
+      discarded: Descartado
+      handled: Tratado
+      interrupted: Interrompido
+      retried: Tentado novamente
+      retry_stopped: Tentativa de reexecução interrompida
+      unhandled: Não tratado
+    helpers:
+      relative_time:
+        future: em %{time}
+        past: "%{time} atrás"
+    jobs:
+      actions:
+        confirm_destroy: Tem certeza de que deseja excluir a tarefa?
+        confirm_discard: Tem certeza de que deseja descartar a tarefa?
+        confirm_force_discard: Tem certeza de que deseja forçar o descarte desta tarefa? A tarefa será marcada como descartada, mas a tarefa em execução não será interrompida - no entanto, ela não será tentada novamente em falhas.
+        confirm_reschedule: Tem certeza de que deseja reagendar a tarefa?
+        confirm_retry: Tem certeza de que deseja tentar novamente a tarefa?
+        destroy: Excluir tarefa
+        discard: Descartar tarefa
+        force_discard: Forçar descarte de tarefa
+        reschedule: Reagendar tarefa
+        retry: Tentar tarefa novamente
+      destroy:
+        notice: A tarefa foi excluída.
+      discard:
+        notice: A tarefa foi descartada.
+      executions:
+        application_trace: Trace da aplicação
+        full_trace: Trace completo
+        in_queue: na fila
+        recovery: recuperação
+        runtime: tempo de execução
+        title: Execuções
+      force_discard:
+        notice: A tarefa foi forçadamente descartada. Ela continuará a ser executada, mas não será tentada novamente em caso de falhas.
+      index:
+        job_pagination: Paginação de Tarefa
+        older_jobs: Tarefas antigas
+      reschedule:
+        notice: A tarefa foi reagendada.
+      retry:
+        notice: A tarefa foi tentada novamente.
+      show:
+        jobs: Tarefas
+      table:
+        actions:
+          apply_to_all:
+            one: Aplicar a todas 1 tarefa.
+            other: Aplicar a todas %{count} tarefas.
+          confirm_destroy_all: Tem certeza de que deseja excluir as tarefas selecionadas?
+          confirm_discard_all: Tem certeza de que deseja descartar as tarefas selecionadas?
+          confirm_reschedule_all: Tem certeza de que deseja reagendar as tarefas selecionadas?
+          confirm_retry_all: Tem certeza de que deseja tentar novamente as tarefas selecionadas?
+          destroy_all: Excluir tudo
+          discard_all: Descartar tudo
+          reschedule_all: Reagendar tudo
+          retry_all: Tentar tudo novamente
+          title: Ações
+        no_jobs_found: Nenhuma tarefa encontrada.
+        toggle_actions: Alternar Ações
+        toggle_all_jobs: Alternar todas as tarefas
+    models:
+      batch:
+        created: Criado
+        created_at: Criado em
+        discarded: Descartado
+        discarded_at: Descartado em
+        enqueued: Enfileirado
+        enqueued_at: Enfileirado em
+        finished: Concluído
+        finished_at: Concluído em
+        jobs: Tarefas
+        name: Nome
+      cron:
+        class: Classe
+        last_run: Última execução
+        next_scheduled: Próximo agendamento
+        schedule: Agendamento
+        states:
+          active: Ativo
+          paused: Pausado
+        status: Estado
+      job:
+        arguments: Argumentos
+        attempts: Tentativas
+        concurrency_claims: Reservas de concorrência
+        labels: Rótulos
+        priority: Prioridade
+        queue: Fila
+    number:
+      format:
+        delimiter: "."
+        separator: ","
+      human:
+        decimal_units:
+          delimiter: "."
+          format: "%n%u"
+          precision: 3
+          separator: ","
+          units:
+            billion: B
+            million: M
+            quadrillion: Q
+            thousand: K
+            trillion: T
+            unit: ''
+    pauses:
+      index:
+        confirm_pause: Tem certeza que deseja pausar %{value}?
+        confirm_unpause: Tem certeza que deseja retomar %{value}?
+        disabled: O recurso experimental de Pausas do GoodJob está desativado por padrão porque pode degradar o desempenho. Configure para ativar
+        job_class: Classe da tarefa
+        label: Rótulo
+        pause: Pausar
+        queue: Fila
+        title: Pausas
+        type: Tipo de Pausa
+        unpause: Retomar
+        value: Valor
+    performance:
+      index:
+        chart_title: Latência de execução total em segundos
+        chart_title_queue: Latência na fila média em segundos
+        chart_title_total: Latência total média em segundos
+        execution_latency: Latência de execução
+        executions: Execuções
+        job_class: Classe da tarefa
+        jobs: Tarefas
+        no_executions: Nenhuma execução neste intervalo de tempo.
+        queue_latency: Latência na fila
+        queue_name: Nome da fila
+        title: Desempenho
+        total_latency: Latência total
+      latency:
+        average: méd
+        maximum: máx
+        minimum: mín
+      metric:
+        chart_metric: Métrica do gráfico
+        metric_options:
+          execution: Latência de execução
+          queue: Latência na fila
+          total: Latência total
+      range:
+        bucket_size:
+          days: "%{count}d"
+          hours: "%{count}h"
+          minutes: "%{count}m"
+          months:
+            one: "~%{count} mês"
+            other: "~%{count} meses"
+          seconds: "%{count}s"
+          years: "~%{count}a"
+        chart_bucket_size: 'Granularidade temporal do gráfico: %{size}'
+        custom_range: Personalizado
+        custom_range_hint: arraste no gráfico
+        end_time: Horário de término
+        open_time_ranges: Abrir intervalos de tempo de desempenho
+        quick_ranges: Intervalos rápidos
+        range_options:
+          1h: Última hora
+          24h: Últimas 24 horas
+          6h: Últimas 6 horas
+          7d: Últimos 7 dias
+        reload_range: Recarregar dados de desempenho
+        start_time: Horário de início
+        time_range: Intervalo de tempo de desempenho
+        time_zone: 'Fuso horário:'
+      show:
+        execution_chart_title: Latência de execução
+        queue_chart_title: Latência na fila
+        slow: Lento
+        title: Desempenho
+        total_chart_title: Latência total
+    processes:
+      index:
+        cron_enabled: Agendamento ativado
+        no_good_job_processes_found: Nenhum processo do GoodJob encontrado.
+        process: Processo
+        schedulers: Agendadores
+        started: Iniciado
+        title: Processos
+        updated: Atualizado
+    shared:
+      boolean:
+        'false': Não
+        'true': Sim
+      error: Erro
+      filter:
+        all: Tudo
+        all_jobs: Todas as tarefas
+        all_queues: Todas as filas
+        clear: Limpar
+        job_name: Nome da Tarefa
+        label: Rótulo
+        placeholder: Pesquisar por classe, ID da tarefa, parâmetros da tarefa e texto de erro.
+        queue_name: Nome da Fila
+        search: Pesquisar
+      navbar:
+        batches: Lotes
+        cleaner: Limpeza de Descartes
+        cron_schedules: Tarefas Programadas
+        jobs: Tarefas
+        live_poll: Acompanhamento ao Vivo
+        name: "GoodJob 👍"
+        pauses: Pausas
+        performance: Desempenho
+        processes: Processos
+        theme:
+          auto: Automático
+          dark: Escuro
+          light: Claro
+          theme: Tema
+      pending_migrations: O GoodJob tem migrações pendentes no banco de dados.
+      secondary_navbar:
+        inspiration: Lembre-se, você também está fazendo um Bom Trabalho!
+        last_updated: Última atualização
+    status:
+      discarded: Descartado
+      queued: Enfileirado
+      retried: Tentado novamente
+      running: Em execução
+      scheduled: Agendado
+      succeeded: Concluído com sucesso
